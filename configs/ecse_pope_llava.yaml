@@ -1,59 +1,36 @@
-# ECSE POPE 评估配置（LLaVA-1.5版本）
-# 参考 ecse_mme_llava.yaml 和 MME 评测参数
-
-# 模型配置
-model_name: /data/home/scyb531/MODELS/llava-v1.5-7b
+# ECSE POPE Evaluation Config (LLaVA-1.5)
+# Model config
+model_name: /path/to/llava-v1.5-7b
 precision: bf16
 
-# ECSE 子空间参数（参考 MME 配置，适配 POPE 任务）
+# ECSE subspace parameters
 anchor_layer: 28
 visual_clean_layers: [10]
-rank_evidence: 8          # 确保证据子空间丰富
-rank_prior: 5             # 保持先验支持强度
-kappa: 0.50               # 适中的门控强度，平衡准确性和覆盖率
-lambda_prior: 0.22        # 适中的先验抑制
+rank_evidence: 8
+rank_prior: 5
+kappa: 0.50
+lambda_prior: 0.22
 eps: 1.0e-6
 
-# 稳健化参数
-weight_temp: 1.15         # 参考 TuneA2
+# Robustification parameters
+weight_temp: 1.15
 vcr_floor: 0.045
 pcr_ceiling: 0.92
-pcr_threshold: 0.015      # 适中的先验词汇阈值
-lambda_n_max: 3.2         # 负向抑制
-lambda_p_max: 3.8         # 正向生成
+pcr_threshold: 0.015
+lambda_n_max: 3.2
+lambda_p_max: 3.8
 norm_preserve: true
 norm_beta: 0.74
 blend_tau: 0.76
 
-# 生成参数（POPE 任务通常需要简短答案）
-max_new_tokens: 64       # POPE 主要是 Yes/No 问答，不需要太长
-top_p: 0.90               # 标准探索空间
-temperature: 0.12         # 保持生成稳定性
+# Generation parameters
+max_new_tokens: 64
+top_p: 0.90
+temperature: 0.12
 
-# 数据集配置
-pope_root: /data/home/scyb531/DATA/POPE
-coco_images: /data/home/scyb531/DATA/val2014
+# Dataset config
+pope_root: /path/to/POPE
+coco_images: /path/to/coco/val2014
 
-# 输出配置
-output_dir: /data/home/scyb531/lyg/HulluEdit/outputs/pope_llava
-
-# 配置说明：
-# -----------------------------------------------------------------------------
-# POPE 评测配置，参考 MME 配置但针对 Yes/No 问答任务优化
-# 
-# POPE (Polling-based Object Probing Evaluation) 用于评估视觉语言模型的
-# 目标幻觉问题。通过生成关于图像中对象存在性的问题来测试模型是否会产生幻觉。
-# 
-# 预期效果：
-# - POPE Accuracy: 目标 > 85%
-# - POPE Precision: 目标 > 90%（减少误报）
-# - POPE Recall: 目标 > 80%（减少漏报）
-# - 低幻觉率（Yes/No 判断准确）
-# 
-# 适用场景：
-# - ✅ POPE 评测（目标幻觉检测任务）
-# - ✅ Yes/No 问答任务
-# - ✅ 需要精确判断的场景
-# - ❌ 不适合需要详细描述的场景
-# -----------------------------------------------------------------------------
-
+# Output config
+output_dir: /path/to/outputs/pope_llava

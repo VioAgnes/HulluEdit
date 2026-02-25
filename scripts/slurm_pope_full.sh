@@ -7,36 +7,34 @@
 #SBATCH --cpus-per-task=8
 #SBATCH -t 24:00:00
 
-# 环境加载
-module load miniconda/24.9.2
-module load cuda/12.1
-eval "$(conda shell.bash hook)"
-conda activate deco311
+# Environment setup (modify according to your system)
+# module load miniconda/24.9.2
+# module load cuda/12.1
+# eval "$(conda shell.bash hook)"
+# conda activate your_env
+
 export PYTHONUNBUFFERED=1
+export PYTHONPATH=/path/to/HulluEdit:$PYTHONPATH
 
-# 使用 ParamSteer 的 transformers 库
-export PYTHONPATH=/data/home/scyb531/lyg/ParamSteer:$PYTHONPATH
+# Working directory
+cd /path/to/HulluEdit
 
-# 工作目录
-cd /data/home/scyb531/lyg/ECSE
-
-# 创建日志目录
+# Create log directory
 mkdir -p logs
 
-# 运行 POPE 评测（完整数据集）
+# Run POPE evaluation (full dataset)
 echo "=========================================="
-echo "ECSE POPE 完整评测"
-echo "开始时间: $(date)"
+echo "ECSE POPE Full Evaluation"
+echo "Start time: $(date)"
 echo "=========================================="
 
-# Adversarial split (最难)
-python -m ecse.eval.pope_eval \
-    --config configs/ecse_llava7b.yaml \
+# Adversarial split
+python -m hulluedit.eval.pope_eval \
+    --config configs/ecse_pope_llava.yaml \
     --split adversarial \
     --output outputs/pope_adversarial.json
 
 echo ""
 echo "=========================================="
-echo "评测完成: $(date)"
+echo "Evaluation completed: $(date)"
 echo "=========================================="
-

@@ -1,33 +1,34 @@
 #!/bin/bash
 #SBATCH -J pope-llava
-#SBATCH -o /data/home/scyb531/lyg/HulluEdit/logs/pope_llava_%j.out
-#SBATCH -e /data/home/scyb531/lyg/HulluEdit/logs/pope_llava_%j.err
+#SBATCH -o /path/to/logs/pope_llava_%j.out
+#SBATCH -e /path/to/logs/pope_llava_%j.err
 #SBATCH -p gpu
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=8
 
-# POPE 评测脚本 - LLaVA-1.5
-# 使用 ECSE 方法进行 POPE 评测
+# POPE Evaluation Script - LLaVA-1.5
+# Uses ECSE method for POPE evaluation
 
 set -euo pipefail
 
-# 环境加载
-module load miniconda/24.9.2 || true
-module load cuda/12.1 || true
-source activate deco311 || true
+# Environment setup (modify according to your system)
+# module load miniconda/24.9.2 || true
+# module load cuda/12.1 || true
+# source activate your_env || true
 
-# 环境设置
-# 使用 ParamSteer 的 transformers 库来解决版本兼容问题
-export PYTHONPATH=/data/home/scyb531/lyg/ParamSteer:/data/home/scyb531/lyg/HulluEdit:${PYTHONPATH:-}
+# Set up Python path
+export PYTHONPATH=/path/to/HulluEdit:${PYTHONPATH:-}
 export PYTHONUNBUFFERED=1
 
-# 配置路径
-CONFIG_FILE=/data/home/scyb531/lyg/HulluEdit/configs/ecse_pope_llava.yaml
-OUTPUT_DIR=/data/home/scyb531/lyg/HulluEdit/outputs/pope_llava
+# Configuration paths
+# NOTE: Please update these paths according to your environment
+CONFIG_FILE=/path/to/HulluEdit/configs/ecse_pope_llava.yaml
+OUTPUT_DIR=/path/to/HulluEdit/outputs/pope_llava
+HULLU_ROOT=/path/to/HulluEdit
 
-# 创建输出目录和日志目录
+# Create output and log directories
 mkdir -p "$OUTPUT_DIR"
-mkdir -p /data/home/scyb531/lyg/HulluEdit/logs
+mkdir -p /path/to/HulluEdit/logs
 
 echo "=================================="
 echo "[INFO] POPE Evaluation - LLaVA-1.5 with ECSE"
@@ -37,37 +38,37 @@ echo "[INFO] Config: $CONFIG_FILE"
 echo "[INFO] Output dir: $OUTPUT_DIR"
 echo ""
 
-# 运行所有三个 split
+# Run all three splits
 SPLITS=("random" "popular" "adversarial")
 
 for SPLIT in "${SPLITS[@]}"; do
     echo "=================================="
     echo "[INFO] Processing split: $SPLIT"
     echo "=================================="
-    
+
     OUTPUT_FILE="$OUTPUT_DIR/pope_llava_${SPLIT}.json"
-    
-    python /data/home/scyb531/lyg/HulluEdit/ecse/eval/pope_eval.py \
+
+    python $HULLU_ROOT/hulluedit/eval/pope_eval.py \
         --config "$CONFIG_FILE" \
         --split "$SPLIT" \
         --output "$OUTPUT_FILE" \
         --model-name "LLaVA-1.5"
-    
+
     if [ $? -ne 0 ]; then
         echo "[ERROR] POPE evaluation failed for split: $SPLIT"
         exit 1
     fi
-    
+
     echo "[INFO] Completed split: $SPLIT"
     echo ""
 done
 
-# 聚合结果
+# Aggregate results
 echo "=================================="
 echo "[INFO] Aggregating results..."
 echo "=================================="
 
-python /data/home/scyb531/lyg/HulluEdit/ecse/eval/aggregate_pope.py \
+python $HULLU_ROOT/hulluedit/eval/aggregate_pope.py \
     --files \
         "$OUTPUT_DIR/pope_llava_random.json" \
         "$OUTPUT_DIR/pope_llava_popular.json" \
@@ -91,4 +92,3 @@ echo "  - Aggregated: $OUTPUT_DIR/pope_llava_all_metrics.json"
 echo ""
 echo "[INFO] End time: $(date)"
 echo "=================================="
-

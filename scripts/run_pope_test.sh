@@ -1,22 +1,22 @@
 #!/bin/bash
-# 快速测试 POPE 评测（10 个样本）
+# Quick POPE evaluation test (10 samples)
 
 set -euo pipefail
 
-# 环境设置
-export PYTHONPATH=/data/home/scyb531/lyg/ParamSteer:/data/home/scyb531/lyg/HulluEdit:${PYTHONPATH:-}
+# Environment setup
+export PYTHONPATH=/path/to/HulluEdit:${PYTHONPATH:-}
 export PYTHONUNBUFFERED=1
 
-# 测试 LLaVA
+# Test LLaVA
 echo "=================================="
 echo "[TEST] Testing POPE with LLaVA-1.5 (10 samples)"
 echo "=================================="
 
-python /data/home/scyb531/lyg/HulluEdit/ecse/eval/pope_eval.py \
-    --config /data/home/scyb531/lyg/HulluEdit/configs/ecse_pope_llava.yaml \
+python /path/to/HulluEdit/hulluedit/eval/pope_eval.py \
+    --config /path/to/HulluEdit/configs/ecse_pope_llava.yaml \
     --split adversarial \
     --max-samples 10 \
-    --output /data/home/scyb531/lyg/HulluEdit/outputs/pope_test_llava.json \
+    --output /path/to/HulluEdit/outputs/pope_test_llava.json \
     --model-name "LLaVA-1.5"
 
 if [ $? -eq 0 ]; then
@@ -31,11 +31,11 @@ echo "=================================="
 echo "[TEST] Testing POPE with MiniGPT-4 (10 samples)"
 echo "=================================="
 
-python /data/home/scyb531/lyg/HulluEdit/ecse/eval/pope_eval.py \
-    --config /data/home/scyb531/lyg/HulluEdit/configs/ecse_pope_minigpt4.yaml \
+python /path/to/HulluEdit/hulluedit/eval/pope_eval.py \
+    --config /path/to/HulluEdit/configs/ecse_pope_minigpt4.yaml \
     --split adversarial \
     --max-samples 10 \
-    --output /data/home/scyb531/lyg/HulluEdit/outputs/pope_test_minigpt4.json \
+    --output /path/to/HulluEdit/outputs/pope_test_minigpt4.json \
     --model-name "MiniGPT-4"
 
 if [ $? -eq 0 ]; then
@@ -49,4 +49,3 @@ echo ""
 echo "=================================="
 echo "[SUCCESS] All tests passed!"
 echo "=================================="
-
