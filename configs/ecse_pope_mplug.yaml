@@ -1,0 +1,41 @@
+# ECSE POPE 评估配置（mPLUG-Owl2 版本）
+# 参考 ecse_chair_eval_robust.yaml 和 ecse_pope_llava.yaml
+
+# 模型配置
+model_name: mPLUG-Owl2
+model_path: /data/home/scyb531/MODELS/mplug-owl2-llama2-7b  # 本地模型路径
+precision: fp16
+
+# ECSE 子空间参数（参考 ecse_chair_eval_robust.yaml）
+anchor_layer: 26
+visual_clean_layers: [10]
+rank_evidence: 6
+rank_prior: 3
+kappa: 0.35
+lambda_prior: 0.15
+eps: 1.0e-6
+
+# 稳健化参数
+weight_temp: 1.8
+vcr_floor: 0.06
+pcr_ceiling: 0.95
+pcr_threshold: 0.03
+lambda_n_max: 2.0
+lambda_p_max: 2.0
+norm_preserve: true
+norm_beta: 0.6
+blend_tau: 0.7
+
+# 生成参数（POPE 任务通常需要简短答案，参考 ecse_chair_eval_robust.yaml）
+max_new_tokens: 64
+top_p: 1.0
+temperature: 0.05
+
+# 数据集配置
+pope_root: /data/home/scyb531/DATA/POPE
+coco_images: /data/home/scyb531/DATA/val2014
+
+# 输出配置
+output_dir: /data/home/scyb531/lyg/HulluEdit/outputs/pope_mplug
+
+
