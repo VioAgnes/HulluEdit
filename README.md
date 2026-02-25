@@ -8,9 +8,7 @@ This repository contains the official code of HulluEdit, a method for mitigating
 
 ## Overview
 
-We introduce a novel method named **HulluEdit** (Evidence-Consistent Subspace Editing), which can effectively mitigate object hallucinations (OH) with **no extra inference cost** and **single-pass editing**.
-
-HulluEdit edits model weights by extracting visual evidence subspaces and orthogonalizing the model behavior based on subspace projection:
+We introduce a novel method named **HulluEdit** (Evidence-Consistent Subspace Editing), which can effectively mitigate object hallucinations (OH). HulluEdit edits model weights by extracting visual evidence subspaces and orthogonalizing the model behavior based on subspace projection:
 
 - **Evidence Subspace Extraction**: HulluEdit first constructs a visual evidence subspace from image-conditioned token representations by analyzing the hidden states of truthful vs. hallucinated samples through Singular Value Decomposition (SVD), to find the main directions of visual grounding as the Evidence Space.
 - **Anti-Prior Subspace Construction**: HulluEdit builds an anti-prior subspace to suppress language-only biases that lead to hallucinations, capturing the directions where models tend to generate objects not present in images.
@@ -27,13 +25,6 @@ Git clone our repository, creating a python environment and activate it via the 
 ```bash
 git clone https://github.com/your-repo/HulluEdit.git
 cd HulluEdit
-conda env create -f environment.yml
-conda activate hullu
-```
-
-Or manually:
-
-```bash
 conda create -n hullu python=3.10
 conda activate hullu
 pip install -r requirements.txt
