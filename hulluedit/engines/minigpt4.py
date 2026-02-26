@@ -1,8 +1,8 @@
 """
-MiniGPT-4 推理引擎（用于 POPE/CHAIR 评测，集成 ECSE 编辑）
+MiniGPT-4 Inference Engine (for POPE/CHAIR evaluation, integrated with Hulluedit editing)
 
-使用 MODELS/MiniGPT-4 下的官方实现，参考 DeCo 项目的实现方式。
-不依赖 sjc/Nullu 文件夹。
+Uses official implementation under MODELS/MiniGPT-4, reference from DeCo project.
+Does not depend on sjc/Nullu folder.
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import sys
 import torch
 from PIL import Image
 
-# 添加 MODELS/MiniGPT-4 到路径（必须在最前面，避免与其他版本冲突）
+# Add MODELS/MiniGPT-4 to path (must be at the beginning to avoid conflicts with other versions)
 _MINIGPT4_ROOT = os.environ.get("MINIGPT4_ROOT", "/data/home/scyb531/MODELS/MiniGPT-4")
 _MINIGPT4_ROOT = os.path.abspath(_MINIGPT4_ROOT)
 if _MINIGPT4_ROOT not in sys.path:
@@ -28,41 +28,41 @@ try:
         CONV_VISION_LLama2,
         CONV_VISION_Vicuna0,
     )
-    # 导入模块以注册模型、处理器等
+    # Import modules to register models, processors, etc.
     from minigpt4.datasets.builders import *
     from minigpt4.models import *
     from minigpt4.processors import *
 except Exception as e:
     raise ImportError(
-        f"未找到 MiniGPT-4 依赖，请确保 MINIGPT4_ROOT 指向包含 minigpt4 的仓库。"
-        f"当前: {_MINIGPT4_ROOT}. 错误: {e}"
+        f"MiniGPT-4 dependencies not found, please ensure MINIGPT4_ROOT points to the minigpt4 repository."
+        f"Current: {_MINIGPT4_ROOT}. Error: {e}"
     )
 
-from ecse.steer import ECSESteerer, ECSEConfig
+from hulluedit.steer import HullueditSteerer, HullueditConfig
 
 
 @dataclass
 class MiniGPT4EngineConfig:
-    """MiniGPT-4 引擎配置"""
-    cfg_path: str  # MiniGPT-4 评估 YAML 配置文件路径
+    """MiniGPT-4 Engine Configuration"""
+    cfg_path: str  # MiniGPT-4 evaluation YAML config file path
     anchor_layer: int = 26
     max_new_tokens: int = 128
     top_p: float = 0.9
     temperature: float = 0.2
-    repetition_penalty: float = 1.2  # 重复惩罚系数，用于减少重复生成
+    repetition_penalty: float = 1.2  # Repetition penalty coefficient to reduce duplicate generation
     gpu_id: int = 0
 
 
-class MiniGPT4ECSEEngine:
-    """MiniGPT-4 + ECSE 推理引擎（显式逐步生成并进行隐表示编辑）"""
+class MiniGPT4HullueditEngine:
+    """MiniGPT-4 + Hulluedit Inference Engine (explicit step-by-step generation with implicit representation editing)"""
 
-    def __init__(self, eng_cfg: MiniGPT4EngineConfig, ecse_cfg: ECSEConfig, device: str = "cuda:0") -> None:
+    def __init__(self, eng_cfg: MiniGPT4EngineConfig, hulluedit_cfg: HullueditConfig, device: str = "cuda:0") -> None:
         self.device = device
         self.eng_cfg = eng_cfg
-        self.ecse_cfg = ecse_cfg
-        self.steerer = ECSESteerer(ecse_cfg)
+        self.hulluedit_cfg = hulluedit_cfg
+        self.steerer = HullueditSteerer(hulluedit_cfg)
 
-        # 使用 Config 类加载配置（参考 DeCo 实现）
+        # Use Config class to load config (reference DeCo implementation)
         class Args:
             def __init__(self, cfg_path, options=None):
                 self.cfg_path = cfg_path
@@ -71,7 +71,7 @@ class MiniGPT4ECSEEngine:
         args = Args(eng_cfg.cfg_path, [])
         cfg = Config(args)
         
-        # 初始化模型
+        # Initialize model
         model_config = cfg.model_cfg
         model_config.device_8bit = eng_cfg.gpu_id
         
@@ -79,32 +79,32 @@ class MiniGPT4ECSEEngine:
         self.model = model_cls.from_config(model_config).to(self.device)
         self.model.eval()
         
-        # 获取对话模板（默认使用 CONV_VISION_Vicuna0 以匹配 DeCo）
+        # Get conversation template (default use CONV_VISION_Vicuna0 to match DeCo)
         conv_dict = {
             'pretrain_vicuna0': CONV_VISION_Vicuna0,
             'pretrain_llama2': CONV_VISION_LLama2
         }
-        self.model_type = model_config.model_type  # 保存模型类型，用于后处理
+        self.model_type = model_config.model_type  # Save model type for post-processing
         self.conv_template = conv_dict.get(self.model_type, CONV_VISION_Vicuna0).copy()
         
-        # 获取停止符号（end_sym），用于停止条件检查
+        # Get stop symbol (end_sym) for stop condition check
         self.end_sym = model_config.get("end_sym", "###")
-        # 将停止符号编码为 token IDs
+        # Encode stop symbol to token IDs
         if self.end_sym:
             end_sym_ids = self.model.llama_tokenizer.encode(self.end_sym, add_special_tokens=False)
-            # 如果停止符号是多个 token，只检查最后一个（通常 "###" 是一个 token，但 "</s>" 可能是多个）
+            # If stop symbol is multiple tokens, only check the last one
             self.end_sym_token_id = end_sym_ids[-1] if end_sym_ids else None
-            # 保存完整的停止符号 token 序列（用于更精确的检测）
+            # Save full stop symbol token sequence (for more precise detection)
             self.end_sym_token_ids = end_sym_ids if end_sym_ids else []
         else:
             self.end_sym_token_id = None
             self.end_sym_token_ids = []
         
-        # 初始化视觉处理器
+        # Initialize visual processor
         vis_processor_cfg = cfg.datasets_cfg.cc_sbu_align.vis_processor.train
         self.vis_processor = registry.get_processor_class(vis_processor_cfg.name).from_config(vis_processor_cfg)
         
-        # 初始化 Chat 对象（用于处理对话）
+        # Initialize Chat object (for conversation handling)
         self.chat = MiniChat(self.model, self.vis_processor, device=self.device)
 
     @torch.no_grad()
@@ -115,24 +115,24 @@ class MiniGPT4ECSEEngine:
         max_new_tokens: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
-        生成回答，集成 ECSE 编辑
+        Generate response, integrated with Hulluedit editing
         
         Args:
-            prompt: 文本提示
-            image_path: 图像路径
-            max_new_tokens: 最大生成 token 数
+            prompt: Text prompt
+            image_path: Image path
+            max_new_tokens: Max tokens to generate
             
         Returns:
-            包含 text, certs, tokens 的字典
+            Dictionary containing text, certs, tokens
         """
-        # 构建对话与图片上下文
+        # Build conversation with image context
         conv = self.conv_template.copy()
         img_list = []
         _ = self.chat.upload_img(image_path, conv, img_list)
-        self.chat.encode_img(img_list)  # 这会将图像编码并放入 img_list[0]
+        self.chat.encode_img(img_list)  # This encodes image and puts it in img_list[0]
         self.chat.ask(prompt, conv)
 
-        # 准备输入嵌入与采样参数
+        # Prepare input embeddings and sampling parameters
         gen_kwargs = self.chat.answer_prepare(
             conv,
             img_list,
@@ -142,12 +142,12 @@ class MiniGPT4ECSEEngine:
         )
         inputs_embeds: torch.Tensor = gen_kwargs.pop("inputs_embeds")  # [1, seq, hidden]
 
-        # 从 img_list 中获取视觉嵌入长度（避免重复计算）
-        # img_list[0] 是 encode_img 的结果，形状为 [1, n_vis, hidden_dim]
+        # Get visual embedding length from img_list (avoid redundant computation)
+        # img_list[0] is the result of encode_img, shape [1, n_vis, hidden_dim]
         if len(img_list) > 0 and isinstance(img_list[0], torch.Tensor):
             n_vis = int(img_list[0].shape[1])
         else:
-            # 如果 img_list 为空或格式不对，回退到重新计算（不应该发生）
+            # If img_list is empty or wrong format, fallback to recomputing (shouldn't happen)
             raw_image = Image.open(image_path).convert("RGB")
             image_tensor = self.vis_processor(raw_image).unsqueeze(0).to(self.device)
             image_emb, _ = self.model.encode_img(image_tensor)
@@ -171,8 +171,8 @@ class MiniGPT4ECSEEngine:
                     return_dict=True,
                 )
             else:
-                # 后续步骤：使用 input_ids 和 past_key_values
-                # 注意：next_token_id 的形状应该是 [1, 1]
+                # Subsequent steps: use input_ids and past_key_values
+                # Note: next_token_id shape should be [1, 1]
                 if next_token_id.dim() == 1:
                     next_token_id = next_token_id.unsqueeze(0)
                 outputs = self.model.llama_model(
@@ -186,12 +186,12 @@ class MiniGPT4ECSEEngine:
             past_key_values = outputs.past_key_values
             hidden_states = outputs.hidden_states  # Tuple[Tensors]
 
-            # 检查 anchor_layer 是否在有效范围内
+            # Check if anchor_layer is in valid range
             num_layers = len(hidden_states)
             if self.eng_cfg.anchor_layer >= num_layers:
                 raise ValueError(
-                    f"anchor_layer {self.eng_cfg.anchor_layer} 超出范围 "
-                    f"(模型共有 {num_layers} 层，索引范围 0-{num_layers-1})"
+                    f"anchor_layer {self.eng_cfg.anchor_layer} out of range "
+                    f"(model has {num_layers} layers, index range 0-{num_layers-1})"
                 )
             
             anchor_hidden = hidden_states[self.eng_cfg.anchor_layer]  # [1, seq, d]
@@ -199,26 +199,26 @@ class MiniGPT4ECSEEngine:
 
             if first_pass:
                 seq_len = anchor_hidden.shape[1]
-                # 计算视觉嵌入的结束位置
-                # inputs_embeds 的结构: [text_before_image, image_emb, text_after_image]
-                # 需要找到 <ImageHere> 在 prompt 中的位置来确定视觉嵌入的边界
-                # 由于 answer_prepare 使用 get_context_emb，视觉嵌入已经嵌入到 inputs_embeds 中
-                # 我们使用 n_vis 作为视觉 token 的数量
+                # Compute visual embedding end position
+                # inputs_embeds structure: [text_before_image, image_emb, text_after_image]
+                # Need to find <ImageHere> position in prompt to determine visual embedding boundary
+                # Since answer_prepare uses get_context_emb, visual embeddings are already embedded in inputs_embeds
+                # We use n_vis as the number of visual tokens
                 vision_end_idx = min(n_vis, seq_len)
                 
-                # 确保索引有效
+                # Ensure index is valid
                 if vision_end_idx > seq_len:
                     vision_end_idx = seq_len
                 
-                # 缓存视觉隐藏状态（从 anchor_hidden 中提取视觉部分）
+                # Cache visual hidden states (extract visual part from anchor_hidden)
                 if vision_end_idx > 0:
                     cached_vis_states = anchor_hidden[0, :vision_end_idx, :].clone()
                 else:
                     hidden_dim = anchor_hidden.shape[2]
                     cached_vis_states = torch.empty(0, hidden_dim, dtype=anchor_hidden.dtype, device=anchor_hidden.device)
                 
-                # 缓存文本隐藏状态（视觉之后到最后一个位置之前的部分）
-                # 最后一个位置是当前要生成的位置，不包含在文本状态中
+                # Cache text hidden states (part after visual to last position before)
+                # Last position is current generation position, not included in text states
                 if vision_end_idx < seq_len - 1:
                     cached_txt_states = anchor_hidden[0, vision_end_idx:-1, :].clone()
                 else:
@@ -232,16 +232,16 @@ class MiniGPT4ECSEEngine:
 
             h_last = last_hidden[0, -1, :]
 
-            # ECSE 编辑
+            # Hulluedit editing
             U = self.steerer.compute_evidence_subspace(cached_vis_states, h_last)
             P = self.steerer.compute_anti_prior_subspace(cached_txt_states, U)
             edit_result = self.steerer.edit_text_hidden(h_last, U, P)
 
             logits = self.model.llama_model.lm_head(edit_result.h_edited.unsqueeze(0))
 
-            # 应用 repetition_penalty：惩罚最近生成的 token，减少重复
+            # Apply repetition_penalty: penalize recently generated tokens to reduce duplication
             if self.eng_cfg.repetition_penalty > 1.0 and len(generated_ids) > 0:
-                # 只惩罚最近 50 个 token，避免过度惩罚
+                # Only penalize recent 50 tokens to avoid over-penalization
                 recent_tokens = set(generated_ids[-50:])
                 for token_id in recent_tokens:
                     if logits[0, token_id] > 0:
@@ -249,7 +249,7 @@ class MiniGPT4ECSEEngine:
                     else:
                         logits[0, token_id] *= self.eng_cfg.repetition_penalty
 
-            # 采样/贪心
+            # Sampling/greedy
             if self.eng_cfg.temperature < 0.01:
                 next_token_id = torch.argmax(logits, dim=-1, keepdim=True)
             else:
@@ -268,75 +268,75 @@ class MiniGPT4ECSEEngine:
 
             generated_ids.append(next_token_id.item())
             certs.append({
-                "ecr": float(edit_result.ecr.detach().cpu()),
-                "epc": float(edit_result.epc.detach().cpu()),
+                "vcr": float(edit_result.vcr.detach().cpu()),
+                "pcr": float(edit_result.pcr.detach().cpu()),
                 "gate": float(edit_result.gate.detach().cpu()),
             })
 
-            # 检查停止条件：EOS token 或 end_sym（如 "###"）
+            # Check stop condition: EOS token or end_sym (e.g., "###")
             if next_token_id.item() == self.model.llama_tokenizer.eos_token_id:
                 break
             if self.end_sym_token_id is not None and next_token_id.item() == self.end_sym_token_id:
                 break
 
-            # 检测重复生成 "Image Content" 模式（防止模型陷入重复循环）
-            if len(generated_ids) >= 20:  # 至少生成 20 个 token 后才检测
+            # Detect duplicate generation of "Image Content" pattern (prevent model from getting stuck in repetition loop)
+            if len(generated_ids) >= 20:  # Only detect after generating at least 20 tokens
                 recent_text = self.model.llama_tokenizer.decode(generated_ids[-30:], skip_special_tokens=True)
-                # 检查是否重复生成 "Image Content" 或 "</Img>" 后跟 "Image Content"
+                # Check if repeating "Image Content" or "</Img>" followed by "Image Content"
                 if "</Img>" in recent_text:
-                    # 如果生成了 "</Img>"，检查后面是否重复出现 "Image Content"
+                    # If "</Img>" is generated, check if "Image Content" repeats after it
                     parts = recent_text.split("</Img>")
                     if len(parts) > 1:
                         after_img_tag = parts[-1].strip()
-                        # 如果 "</Img>" 后出现多次 "Image Content"，停止生成
+                        # If "Image Content" appears multiple times after "</Img>", stop generation
                         if after_img_tag.count("Image Content") >= 2:
                             break
-                # 检查是否连续多次出现 "Image Content"（即使没有 "</Img>"）
+                # Check if "Image Content" appears consecutively multiple times (even without "</Img>")
                 if recent_text.count("Image Content") >= 3:
                     break
 
         generated_text = self.model.llama_tokenizer.decode(generated_ids, skip_special_tokens=True)
         
-        # 后处理：根据模型类型使用不同的清理方式
+        # Post-processing: different cleanup methods based on model type
         if self.end_sym:
             generated_text = generated_text.split(self.end_sym)[0]
         
-        # 根据模型类型移除不同的前缀
+        # Remove different prefixes based on model type
         if self.model_type == 'pretrain_llama2':
-            # Llama2 格式：移除 [/INST] 之前的内容
+            # Llama2 format: remove content before [/INST]
             if "[/INST]" in generated_text:
                 generated_text = generated_text.split("[/INST]")[-1].strip()
-            # 移除可能的 <s> 前缀
+            # Remove possible <s> prefix
             if generated_text.startswith("<s>"):
                 generated_text = generated_text[3:].strip()
-            # 移除可能的 [INST] 标签（如果模型生成了）
+            # Remove possible [INST] tag (if model generated)
             if generated_text.startswith("[INST]"):
                 generated_text = generated_text[6:].strip()
         else:
-            # Vicuna0 格式：移除 "Assistant:" 前缀
+            # Vicuna0 format: remove "Assistant:" prefix
             if "Assistant:" in generated_text:
                 generated_text = generated_text.split("Assistant:")[-1].strip()
         
-        # 额外后处理：移除 "</Img>" 标签及其后的重复 "Image Content"
+        # Additional post-processing: remove </Img> tag and duplicate "Image Content" after it
         if "</Img>" in generated_text:
-            # 找到 "</Img>" 的位置
+            # Find position of "</Img>"
             img_tag_idx = generated_text.find("</Img>")
             if img_tag_idx >= 0:
-                # 保留 "</Img>" 之前的内容，移除 "</Img>" 及其后的内容
-                # 但如果 "</Img>" 后是正常的回答，则保留
+                # Keep content before "</Img>", remove "</Img>" and content after
+                # But if normal response after "</Img>", keep it
                 after_img = generated_text[img_tag_idx + 6:].strip()
-                # 如果 "</Img>" 后只有重复的 "Image Content"，则移除
+                # If only duplicate "Image Content" after "</Img>", remove it
                 if after_img and "Image Content" in after_img:
-                    # 检查是否主要是重复的 "Image Content"
+                    # Check if it's mainly duplicate "Image Content"
                     cleaned_after = after_img.replace("Image Content", "").strip()
-                    if len(cleaned_after) < len(after_img) * 0.3:  # 如果 70% 以上是 "Image Content"
+                    if len(cleaned_after) < len(after_img) * 0.3:  # If 70%+ is "Image Content"
                         generated_text = generated_text[:img_tag_idx].strip()
                     else:
-                        # 保留 "</Img>" 后的正常内容，但移除重复的 "Image Content"
-                        # 只保留第一个 "Image Content" 之后的内容
+                        # Keep normal content after "</Img>", but remove duplicate "Image Content"
+                        # Only keep content after first "Image Content"
                         parts = after_img.split("Image Content")
-                        if len(parts) > 2:  # 如果有多个 "Image Content"
-                            # 保留第一个 "Image Content" 之前和之后的内容
+                        if len(parts) > 2:  # If multiple "Image Content"
+                            # Keep content before first and after last "Image Content"
                             generated_text = generated_text[:img_tag_idx] + "</Img>" + parts[0] + "Image Content" + parts[-1]
         
         return {"text": generated_text, "certs": certs, "tokens": generated_ids}

@@ -1,7 +1,7 @@
 """
 Aggregate POPE metrics across splits (random, popular, adversarial).
 
-Reads the JSON outputs produced by ecse.eval.pope_eval and computes
+Reads the JSON outputs produced by hulluedit.eval.pope_eval and computes
 micro-averaged Accuracy/Precision/Recall/F1 over all samples combined.
 Optionally prints per-split metrics and writes a summary JSON.
 """

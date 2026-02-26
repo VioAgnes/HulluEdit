@@ -1,63 +1,68 @@
-# HulluEdit: Single-Pass Evidence-Consistent Subspace Editing for Mitigating Hallucinations in Large Vision-Language Models
+# 🚀 HulluEdit: Single-Pass Evidence-Consistent Subspace Editing for Mitigating Hallucinations in Large Vision-Language Models
 
-**CVPR 2026**
+**CVPR 2026** [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/) [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
 
-[Yangguang Lin](#), [Quan Fang](#), [Yufei Li](#), [Jiachen Sun](#), [Junyu Gao](#), [Jitao Sang](#)
+Yangguang Lin, Quan Fang, Yufei Li, Jiachen Sun, Junyu Gao, Jitao Sang
 
-This repository contains the official code of HulluEdit, a method for mitigating object hallucinations in LVLMs via Evidence-Consistent Subspace Editing.
+---
 
-## Overview
+## 🎯 Overview
 
-We introduce a novel method named **HulluEdit** (Evidence-Consistent Subspace Editing), which can effectively mitigate object hallucinations (OH). HulluEdit edits model weights by extracting visual evidence subspaces and orthogonalizing the model behavior based on subspace projection:
+We introduce a novel method named **HulluEdit** (Evidence-Consistent Subspace Editing), which can effectively mitigate object hallucinations (OH) in Large Vision-Language Models (LVLMs). HulluEdit edits model weights by extracting visual evidence subspaces and orthogonalizing the model behavior based on subspace projection:
 
-- **Evidence Subspace Extraction**: HulluEdit first constructs a visual evidence subspace from image-conditioned token representations by analyzing the hidden states of truthful vs. hallucinated samples through Singular Value Decomposition (SVD), to find the main directions of visual grounding as the Evidence Space.
-- **Anti-Prior Subspace Construction**: HulluEdit builds an anti-prior subspace to suppress language-only biases that lead to hallucinations, capturing the directions where models tend to generate objects not present in images.
-- **Closed-Form Weight Editing**: Then HulluEdit applies a closed-form edit to the MLP weights in the LLM backbone of an LVLM, projecting to the evidence subspace while suppressing anti-prior directions. This procedure is applied across a series of layers in the LLM.
+- 🔬 **Evidence Subspace Extraction**: Constructs a visual evidence subspace from image-conditioned token representations by analyzing hidden states of truthful vs. hallucinated samples through SVD, identifying main directions of visual grounding
+- 🛡️ **Anti-Prior Subspace Construction**: Builds an anti-prior subspace to suppress language-only biases that lead to hallucinations
+- ✏️ **Closed-Form Weight Editing**: Applies closed-form edit to MLP weights in the LLM backbone, projecting to evidence subspace while suppressing anti-prior directions
 
-  ![Model diagram](docs/model.png)
+![Model Diagram](docs/model.png)
 
-## Getting Started
+---
 
-### Environment Installation
+## ✨ Key Features
 
-Git clone our repository, creating a python environment and activate it via the following command:
+- 🎨 **Single-Pass Editing** - Edit model weights in one forward pass
+- 🔒 **Evidence-Based** - Grounded in visual evidence extraction
+- 🚀 **Closed-Form Solution** - No iterative optimization required
+- 📈 **Effective** - Significantly reduces object hallucinations
+
+---
+
+## 🛠️ Getting Started
+
+### 📦 Environment Installation
 
 ```bash
+# Clone the repository
 git clone https://github.com/your-repo/HulluEdit.git
 cd HulluEdit
+
+# Create and activate environment
 conda create -n hullu python=3.10
 conda activate hullu
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### Model Setup
+### 🤖 Model Setup
 
 Prepare the following model checkpoints:
 
-- **LLaVA-1.5 7B model**: Download weights from [liuhaotian/llava-v1.5-7b](https://huggingface.co/liuhaotian/llava-v1.5-7b).
-- **MiniGPT-4 (LLaMA-2 Chat 7B)**: Download pretrained weights from [this link](https://github.com/Vision-CAIR/MiniGPT-4). Set the path in `configs/ecse_pope_minigpt4.yaml`.
-- **MiniGPT-4 corresponding LLM**: Download weights from [meta-llama/Llama-2-7b-chat-hf](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf).
-- **mPLUG-Owl2 model**: Download from [MAGAer13/mplug-owl2-llama2-7b](https://huggingface.co/MAGAer13/mplug-owl2-llama2-7b).
+| Model | Download Link |
+|:---|:---|
+| 🟦 **LLaVA-1.5 7B** | [liuhaotian/llava-v1.5-7b](https://huggingface.co/liuhaotian/llava-v1.5-7b) |
+| 🟦 **LLaVA-1.5 13B** | [liuhaotian/llava-v1.5-13b](https://huggingface.co/liuhaotian/llava-v1.5-13b) |
+| 🟨 **MiniGPT-4 (LLaMA-2 Chat 7B)** | [Vision-CAIR/MiniGPT-4](https://github.com/Vision-CAIR/MiniGPT-4) |
+| 🟨 **MiniGPT-4 LLM** | [meta-llama/Llama-2-7b-chat-hf](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf) |
+| 🟪 **mPLUG-Owl2** | [MAGAer13/mplug-owl2-llama2-7b](https://huggingface.co/MAGAer13/mplug-owl2-llama2-7b) |
+| 🟧 **QwenVL** | [Qwen/Qwen-VL](https://huggingface.co/Qwen/Qwen-VL) |
+| 🟧 **QwenVL 2.5** | [Qwen/Qwen2-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct) |
 
-Before running, you need to install a specific version of transformers:
+### 📊 Dataset Preparation
 
-- For LLaVA-1.5 and MiniGPT-4:
+#### MSCOCO 2014
 
-```bash
-pip install transformers==4.37.2
-```
-
-- For mPLUG-Owl2:
-
-```bash
-pip install transformers==4.31.0
-```
-
-### Dataset
-
-Model editing and evaluation require the MSCOCO 2014 dataset. Please download from [here](https://cocodataset.org/#download).
-
-Organize the files as follows:
+Download from [COCO Dataset](https://cocodataset.org/#download) and organize as:
 
 ```
 DATA/
@@ -69,62 +74,86 @@ DATA/
     └── ...
 ```
 
-Download the POPE dataset and place it under:
+#### POPE Dataset
+
+Download and place under:
 
 ```
 DATA/POPE/
-├── coco_pope_random.json
-├── coco_pope_popular.json
-└── coco_pope_adversarial.json
+├── pope_random.json
+├── pope_popular.json
+└── pope_adversarial.json
 ```
 
-## Evaluation
+---
 
-This section describes the three benchmarks used to evaluate object hallucination mitigation in HulluEdit: POPE, CHAIR, and MME. Each benchmark provides a different perspective on hallucination evaluation.
+## 📈 Evaluation
 
-### POPE 
+### 🎯 Benchmarks
 
-**POPE** is a polling-based evaluation benchmark designed to assess object hallucination in LVLMs by converting the hallucination problem into a binary classification task.
+HulluEdit is designed to be evaluated on multiple hallucination benchmarks:
+
+| Benchmark | Status | Description |
+|:---|:---:|:---|
+| ✅ **POPE** | Available | Polling-based Object Probing Evaluation |
+| ⏳ **AMBER** | Coming Soon | Automatic Multi-modal Benchmark |
+| ⏳ **Hallu-Bench** | Coming Soon | Comprehensive Hallucination Benchmark |
+| ⏳ **CHAIR** | Coming Soon | Caption Hallucination Evaluation |
+| ⏳ **MME** | Coming Soon | Multi-Modal Evaluation |
+| ⏳ **LLaVA-Bench** | Coming Soon | LLaVA Benchmark |
+| ⏳ **MMVet** | Coming Soon | Multi-Modal Visual Reasoning |
+
+> 💡 **Current Status:** **POPE** evaluation is supported. Additional evaluation scripts will be released in future updates!
+
+### 🔬 POPE Evaluation
 
 ```bash
+# Navigate to project directory
 cd /root/Hullu
 conda activate hullu
+
+# Run POPE evaluation for LLaVA
 bash scripts/run_pope_llava.sh
+
+# Run POPE evaluation for mPLUG-Owl2
+bash scripts/run_pope_mplug.sh
 ```
 
-### CHAIR
+### 📂 Project Structure
 
-**CHAIR** is an automated metric that evaluates hallucination at the caption level by comparing generated descriptions against ground truth annotations.
+> 💡 **Core Implementation:** The main implementation of HulluEdit is located in the `hulluedit/` directory.
 
-```bash
-cd /root/Hullu
-conda activate hullu
-bash scripts/chair_llava.sh
+```
+HulluEdit/
+├── hulluedit/              # 🔥 Core implementation
+│   ├── steer.py           # Main weight editing method
+│   ├── engines/           # Model engines (LLaVA, MiniGPT-4, mPLUG-Owl2)
+│   └── eval/              # Evaluation scripts
+├── configs/               # Configuration files
+├── scripts/               # Evaluation scripts
+├── docs/                  # Documentation & figures
+└── DATA/                  # Dataset directory
 ```
 
-### MME
+---
 
-**MME** is a comprehensive benchmark that evaluates LVLMs across multiple perception and cognition tasks, including a dedicated hallucination assessment.
-
-```bash
-cd /root/Hullu
-conda activate hullu
-bash scripts/mme_llava.sh
-```
-
-## Citation
-
-If you find this work useful or use our codes in your own research, please use the following bibtex:
+## 📝 Citation
 
 ```bibtex
 @inproceedings{hulluedit2026,
   title={HulluEdit: Single-Pass Evidence-Consistent Subspace Editing for Mitigating Hallucinations in Large Vision-Language Models},
   author={Lin, Yangguang and Fang, Quan and Li, Yufei and Sun, Jiachen and Gao, Junyu and Sang, Jitao},
-  booktitle={Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
   year={2026}
 }
 ```
 
-## Acknowledgment
+---
 
-This repository builds upon the contributions of Deco and AlphaEdit. Thanks for their awesome works.
+## 🙏 Acknowledgments
+
+This work is built upon the excellent foundations of [DeCo](https://github.com/zjunlp/Deco) and [AlphaEdit](https://github.com/jianghoucheng/AlphaEdit). We sincerely thank the authors for their valuable contributions to the research community.
+
+---
+
+⭐ **Star us on GitHub** if this project helps you!

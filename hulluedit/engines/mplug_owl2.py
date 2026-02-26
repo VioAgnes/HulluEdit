@@ -1,6 +1,6 @@
 """
-mPLUG-Owl2 推理引擎（适配 ECSE 方法）
-参考 sjc/ECSE/ecse/engines/mplug_owl2_engine.py 和 sjc/Nullu/mplug_owl2
+mPLUG-Owl2 Inference Engine (adapted for Hulluedit method)
+Reference: sjc/Hulluedit/hulluedit/engines/mplug_owl2_engine.py and sjc/Nullu/mplug_owl2
 """
 from __future__ import annotations
 
@@ -12,15 +12,15 @@ import sys
 from PIL import Image
 import torch
 
-# 挂载 Nullu 仓库到路径
-# 向上5层到 /data/home/scyb531，然后加上 sjc/Nullu
-# engines -> ecse -> HulluEdit -> lyg -> scyb531
+# Mount Nullu repo to path
+# Go up 5 levels to /data/home/scyb531, then add sjc/Nullu
+# engines -> hulluedit -> HulluEdit -> lyg -> scyb531
 _current_dir = __file__
 for _ in range(5):
     _current_dir = os.path.dirname(_current_dir)
 NULLU_ROOT = os.path.join(_current_dir, 'sjc', 'Nullu')
 NULLU_ROOT = os.path.abspath(NULLU_ROOT)
-# 如果相对路径不存在，尝试使用绝对路径
+# If relative path doesn't exist, try absolute path
 if not os.path.exists(NULLU_ROOT):
     NULLU_ROOT = '/data/home/scyb531/sjc/Nullu'
 if NULLU_ROOT not in sys.path:
@@ -29,13 +29,13 @@ if NULLU_ROOT not in sys.path:
 from mplug_owl2.model.builder import load_pretrained_model  # type: ignore
 from mplug_owl2.mm_utils import tokenizer_image_token, process_images  # type: ignore
 from mplug_owl2.constants import DEFAULT_IMAGE_TOKEN, IMAGE_TOKEN_INDEX  # type: ignore
-from ecse.steer import ECSESteerer, ECSEConfig  # type: ignore
+from hulluedit.steer import HullueditSteerer, HullueditConfig  # type: ignore
 
 
 @dataclass
 class MplugOwl2EngineConfig:
-    """mPLUG-Owl2 引擎配置"""
-    model_path: str          # HF 或本地路径
+    """mPLUG-Owl2 Engine Configuration"""
+    model_path: str          # HF or local path
     model_name: str = "mplug_owl2"
     anchor_layer: int = 26
     max_new_tokens: int = 128
@@ -45,13 +45,13 @@ class MplugOwl2EngineConfig:
 
 
 class MplugOwl2Engine:
-    """mPLUG-Owl2 + ECSE 推理引擎（逐步生成并进行隐表示编辑）"""
+    """mPLUG-Owl2 + Hulluedit Inference Engine (step-by-step generation with implicit representation editing)"""
 
-    def __init__(self, eng_cfg: MplugOwl2EngineConfig, ecse_cfg: ECSEConfig, device: str = "cuda") -> None:
+    def __init__(self, eng_cfg: MplugOwl2EngineConfig, hulluedit_cfg: HullueditConfig, device: str = "cuda") -> None:
         self.device = device
         self.eng_cfg = eng_cfg
-        self.ecse_cfg = ecse_cfg
-        self.steerer = ECSESteerer(ecse_cfg)
+        self.hulluedit_cfg = hulluedit_cfg
+        self.steerer = HullueditSteerer(hulluedit_cfg)
 
         self.tokenizer, self.model, self.image_processor, _ = load_pretrained_model(
             eng_cfg.model_path,
@@ -68,10 +68,10 @@ class MplugOwl2Engine:
         image_path: str,
         max_new_tokens: Optional[int] = None,
     ) -> Dict[str, Any]:
-        # 构造带图像 token 的提示
+        # Construct prompt with image token
         prompt_with_image = f"{DEFAULT_IMAGE_TOKEN} {prompt}" if DEFAULT_IMAGE_TOKEN not in prompt else prompt
 
-        # 估计视觉 token 数：对比有图/无图的序列长度差
+        # Estimate visual token count: compare sequence length difference with/without image
         image = Image.open(image_path).convert("RGB")
         images = process_images([image], self.image_processor, getattr(self.model, 'config', None))
         images = images.to(self.device, dtype=torch.float16) if not isinstance(images, list) else images[0].unsqueeze(0).to(self.device, dtype=torch.float16)
@@ -98,7 +98,7 @@ class MplugOwl2Engine:
         seq_without = out_without.hidden_states[self.eng_cfg.anchor_layer].shape[1]
         n_vis = max(seq_with - seq_without, 0)
 
-        # 开始逐步生成（第一步重算以获取 past_kv）
+        # Start step-by-step generation (first step recompute to get past_kv)
         past_key_values = None
         generated_ids = []
         certs = []
@@ -129,7 +129,7 @@ class MplugOwl2Engine:
                 seq_len = anchor_hidden.shape[1]
                 vision_end_idx = min(n_vis, seq_len - 1)
                 
-                # 缓存锚点层的视觉隐藏状态（与 LLaVA 引擎保持一致）
+                # Cache visual hidden states from anchor layer (consistent with LLaVA engine)
                 cached_vis_states = anchor_hidden[0, :vision_end_idx, :].clone()
                 
                 if vision_end_idx < seq_len - 1:
@@ -144,7 +144,7 @@ class MplugOwl2Engine:
 
             h_last = last_hidden[0, -1, :]
 
-            # ECSE 编辑（与 LLaVA 引擎保持一致）
+            # Hulluedit editing (consistent with LLaVA engine)
             U = self.steerer.compute_evidence_subspace(cached_vis_states, h_last)
             P = self.steerer.compute_anti_prior_subspace(cached_txt_states, U)
             edit_result = self.steerer.edit_text_hidden(h_last, U, P)
@@ -169,8 +169,8 @@ class MplugOwl2Engine:
 
             generated_ids.append(next_token_id.item())
             certs.append({
-                "ecr": float(edit_result.ecr.cpu()),
-                "epc": float(edit_result.epc.cpu()),
+                "vcr": float(edit_result.vcr.cpu()),
+                "pcr": float(edit_result.pcr.cpu()),
                 "gate": float(edit_result.gate.cpu()),
             })
 
@@ -182,4 +182,3 @@ class MplugOwl2Engine:
 
         text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
         return {"text": text, "certs": certs, "tokens": generated_ids}
-

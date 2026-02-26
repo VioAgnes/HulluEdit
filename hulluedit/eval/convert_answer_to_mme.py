@@ -1,6 +1,6 @@
 """
-将 MME 答案转换为 MME 官方评测格式
-参考 DeCo/eval_tool/convert_answer_to_mme.py 的实现
+Convert MME answers to MME official evaluation format
+Reference: DeCo/eval_tool/convert_answer_to_mme.py implementation
 """
 import os
 import json
@@ -10,30 +10,30 @@ from pathlib import Path
 
 
 def get_args():
-    parser = argparse.ArgumentParser(description="将 MME 答案转换为官方评测格式")
+    parser = argparse.ArgumentParser(description="Convert MME answers to official evaluation format")
     parser.add_argument('--output_path', type=str, required=True,
-                        help="模型输出的答案文件路径（JSONL 格式）")
+                        help="Model output answer file path (JSONL format)")
     parser.add_argument('--seed', default=0, type=int,
-                        help="随机种子")
+                        help="Random seed")
     parser.add_argument('--log_path', type=str, required=True,
-                        help="转换后的结果保存目录")
+                        help="Output directory for converted results")
     parser.add_argument('--data_path', type=str, 
                         default="/data/home/scyb531/DATA/MME_Benchmark_release_version",
-                        help="MME 数据集根目录（用于获取 ground truth）")
+                        help="MME dataset root directory (for getting ground truth)")
     args = parser.parse_args()
     return args
 
 
 def get_gt(data_path):
     """
-    从 MME 数据集中读取 ground truth
-    参考 DeCo/eval_tool/convert_answer_to_mme.py
+    Read ground truth from MME dataset
+    Reference: DeCo/eval_tool/convert_answer_to_mme.py
     """
     GT = {}
     data_path = Path(data_path).expanduser()
     
     if not data_path.exists():
-        print(f"[WARNING] MME 数据集路径不存在: {data_path}")
+        print(f"[WARNING] MME dataset path does not exist: {data_path}")
         return GT
     
     for category in os.listdir(data_path):
@@ -41,7 +41,7 @@ def get_gt(data_path):
         if not category_dir.is_dir():
             continue
         
-        # 检查目录结构
+        # Check directory structure
         if (category_dir / 'images').exists():
             image_path = category_dir / 'images'
             qa_path = category_dir / 'questions_answers_YN'
@@ -53,7 +53,7 @@ def get_gt(data_path):
         if not qa_path.is_dir():
             continue
         
-        # 读取问题和答案
+        # Read questions and answers
         for file in os.listdir(qa_path):
             if not file.endswith('.txt'):
                 continue
@@ -72,9 +72,9 @@ def get_gt(data_path):
                                 answer = parts[1]
                                 GT[(category, file, question)] = answer
                         except Exception as e:
-                            print(f"[WARNING] 解析行失败: {line}, 错误: {e}")
+                            print(f"[WARNING] Failed to parse line: {line}, error: {e}")
             except Exception as e:
-                print(f"[WARNING] 读取文件失败: {qa_file}, 错误: {e}")
+                print(f"[WARNING] Failed to read file: {qa_file}, error: {e}")
     
     return GT
 
@@ -82,18 +82,18 @@ def get_gt(data_path):
 def main():
     args = get_args()
     
-    # 读取 ground truth
-    print(f"[INFO] 读取 ground truth: {args.data_path}")
+    # Read ground truth
+    print(f"[INFO] Reading ground truth: {args.data_path}")
     GT = get_gt(args.data_path)
-    print(f"[INFO] 共加载 {len(GT)} 个 ground truth 条目")
+    print(f"[INFO] Loaded {len(GT)} ground truth entries")
     
-    # 创建输出目录
+    # Create output directory
     result_dir = Path(args.log_path).expanduser()
     result_dir.mkdir(parents=True, exist_ok=True)
-    print(f"[INFO] 结果将保存到: {result_dir}")
+    print(f"[INFO] Results will be saved to: {result_dir}")
     
-    # 读取模型答案
-    print(f"[INFO] 读取模型答案: {args.output_path}")
+    # Read model answers
+    print(f"[INFO] Reading model answers: {args.output_path}")
     answers = []
     with open(args.output_path, 'r', encoding='utf-8') as f:
         for line in f:
@@ -103,21 +103,21 @@ def main():
             try:
                 answers.append(json.loads(line))
             except Exception as e:
-                print(f"[WARNING] 解析答案失败: {line}, 错误: {e}")
+                print(f"[WARNING] Failed to parse answer: {line}, error: {e}")
     
-    print(f"[INFO] 共加载 {len(answers)} 个模型答案")
+    print(f"[INFO] Loaded {len(answers)} model answers")
     
-    # 按类别分组
+    # Group by category
     results = defaultdict(list)
     for answer in answers:
         question_id = answer.get('question_id', '')
         if not question_id:
             continue
         
-        # 解析 question_id: "category/image_name.png"
+        # Parse question_id: "category/image_name.png"
         parts = question_id.split('/')
         if len(parts) < 2:
-            print(f"[WARNING] 无效的 question_id: {question_id}")
+            print(f"[WARNING] Invalid question_id: {question_id}")
             continue
         
         category = parts[0]
@@ -129,9 +129,9 @@ def main():
         
         results[category].append((file, prompt, text))
     
-    print(f"[INFO] 共 {len(results)} 个类别")
+    print(f"[INFO] Total {len(results)} categories")
     
-    # 写入转换后的结果
+    # Write converted results
     total_matched = 0
     total_unmatched = 0
     
@@ -142,18 +142,18 @@ def main():
         
         with open(output_file, 'w', encoding='utf-8') as fp:
             for file, prompt, answer in cate_tups:
-                # 清理 prompt
+                # Clean prompt
                 if 'Answer the question using a single word or phrase.' in prompt:
                     prompt = prompt.replace('Answer the question using a single word or phrase.', '').strip()
                 
-                # 尝试匹配 ground truth
+                # Try to match ground truth
                 gt_ans = None
                 
-                # 尝试不同的 prompt 格式
+                # Try different prompt formats
                 prompt_variants = [
                     prompt,
                     prompt + ' Please answer yes or no.',
-                    prompt + '  Please answer yes or no.',  # 两个空格
+                    prompt + '  Please answer yes or no.',  # Two spaces
                 ]
                 
                 for p in prompt_variants:
@@ -163,28 +163,27 @@ def main():
                         break
                 
                 if gt_ans is None:
-                    # 未找到 ground truth
+                    # Ground truth not found
                     gt_ans = "UNKNOWN"
                     unmatched += 1
                 
-                # 写入结果：file \t prompt \t gt_ans \t answer
+                # Write result: file \t prompt \t gt_ans \t answer
                 tup = (file, prompt, gt_ans, answer)
                 fp.write('\t'.join(tup) + '\n')
         
         total_matched += matched
         total_unmatched += unmatched
-        print(f"[INFO] {category}: {matched} 匹配, {unmatched} 未匹配")
+        print(f"[INFO] {category}: {matched} matched, {unmatched} unmatched")
     
-    print(f"\n[INFO] 转换完成！")
-    print(f"[INFO] 总计: {total_matched} 匹配, {total_unmatched} 未匹配")
-    print(f"[INFO] 结果保存在: {result_dir}")
+    print(f"\n[INFO] Conversion complete!")
+    print(f"[INFO] Total: {total_matched} matched, {total_unmatched} unmatched")
+    print(f"[INFO] Results saved in: {result_dir}")
     
-    # 统计信息
-    print(f"\n[INFO] 各类别文件:")
+    # Statistics
+    print(f"\n[INFO] Category files:")
     for category_file in sorted(result_dir.glob('*.txt')):
         print(f"  - {category_file.name}")
 
 
 if __name__ == "__main__":
     main()
-

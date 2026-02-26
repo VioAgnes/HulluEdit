@@ -1,7 +1,7 @@
 """
-POPE (Polling-based Object Probing Evaluation) 评测
-评估多模态模型的目标幻觉问题
-支持 LLaVA-1.5、MiniGPT-4 和 mPLUG-Owl2
+POPE (Polling-based Object Probing Evaluation) Evaluation
+Evaluates object hallucination issues in multimodal models
+Supports LLaVA-1.5, MiniGPT-4 and mPLUG-Owl2
 """
 import argparse
 import json
@@ -15,16 +15,16 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from ecse.engines.llava7b import LLaVAECSEEngine, EngineConfig
-from ecse.engines.minigpt4 import MiniGPT4ECSEEngine, MiniGPT4EngineConfig
-# mPlug-Owl2 延迟导入，只在需要时导入
-from ecse.steer import ECSEConfig
+from hulluedit.engines.llava7b import LLaVAHullueditEngine, EngineConfig
+from hulluedit.engines.minigpt4 import MiniGPT4HullueditEngine, MiniGPT4EngineConfig
+# mPlug-Owl2 lazy import
+from hulluedit.steer import HullueditConfig
 
 
 def load_pope_data(pope_root: str, split: str = "adversarial"):
     """
-    加载 POPE 数据集
-    POPE 格式：每行一个 JSON，包含 image, text, label
+    Load POPE dataset
+    POPE format: each line is a JSON containing image, text, label
     """
     pope_file = Path(pope_root) / f"coco_pope_{split}.json"
     if not pope_file.exists():
@@ -39,7 +39,7 @@ def load_pope_data(pope_root: str, split: str = "adversarial"):
 
 
 def evaluate_pope(predictions, labels):
-    """计算 POPE 指标：Accuracy, Precision, Recall, F1"""
+    """Compute POPE metrics: Accuracy, Precision, Recall, F1"""
     assert len(predictions) == len(labels)
     
     tp = sum(1 for p, l in zip(predictions, labels) if p == "yes" and l == "yes")
@@ -65,54 +65,54 @@ def evaluate_pope(predictions, labels):
 
 
 def extract_yes_no(text: str) -> str:
-    """从模型输出中提取 yes/no 答案"""
+    """Extract yes/no answer from model output"""
     if not text:
         return "no"
     
     text = text.lower().strip()
     
-    # 检查前 30 个字符中是否包含 yes/no
+    # Check first 30 characters for yes/no
     prefix = text[:30]
     
-    # 优先检查 yes
+    # Check yes first
     if "yes" in prefix:
         return "yes"
     elif "no" in prefix:
         return "no"
     else:
-        # 默认返回 no（保守策略）
+        # Default to no (conservative strategy)
         return "no"
 
 
 def main():
-    parser = argparse.ArgumentParser(description="POPE 评测（ECSE，支持 LLaVA-1.5、MiniGPT-4 和 mPLUG-Owl2）")
-    parser.add_argument("--config", type=str, required=True, help="配置文件路径")
+    parser = argparse.ArgumentParser(description="POPE Evaluation (Hulluedit, supports LLaVA-1.5, MiniGPT-4 and mPLUG-Owl2)")
+    parser.add_argument("--config", type=str, required=True, help="Config file path")
     parser.add_argument("--split", type=str, default="adversarial", 
                        choices=["random", "popular", "adversarial"],
-                       help="POPE 数据集分割")
+                       help="POPE dataset split")
     parser.add_argument("--max-samples", type=int, default=None,
-                       help="最大样本数（用于快速测试）")
-    parser.add_argument("--output", type=str, required=True, help="输出 JSON 路径")
+                       help="Max samples (for quick testing)")
+    parser.add_argument("--output", type=str, required=True, help="Output JSON path")
     parser.add_argument("--model-name", type=str, default=None,
-                       help="模型名称（LLaVA、MiniGPT-4 或 mPLUG-Owl2），如果不指定则从配置文件推断")
+                       help="Model name (LLaVA, MiniGPT-4 or mPLUG-Owl2), inferred from config if not specified")
     parser.add_argument("--model-path", type=str, default=None,
-                       help="模型路径（mPLUG-Owl2 使用，如果提供则覆盖配置文件中的设置）")
+                       help="Model path (for mPLUG-Owl2, overrides config if provided)")
     args = parser.parse_args()
     
-    # 加载配置
+    # Load config
     with open(args.config, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     
-    # 如果通过命令行提供了 model_path，则覆盖配置文件中的设置
+    # Override model_path from command line if provided
     if args.model_path:
         cfg["model_path"] = args.model_path
     
-    # 确定模型类型
+    # Determine model type
     model_name = args.model_name or cfg.get("model_name", "")
     model_name_lower = model_name.lower()
     
-    # 初始化 ECSE 配置
-    ecse_cfg = ECSEConfig(
+    # Initialize Hulluedit config
+    hulluedit_cfg = HullueditConfig(
         rank_evidence=cfg.get("rank_evidence", 8),
         rank_prior=cfg.get("rank_prior", 5),
         kappa=cfg.get("kappa", 0.50),
@@ -129,25 +129,24 @@ def main():
         weight_temp=cfg.get("weight_temp", 1.15),
     )
     
-    # 初始化引擎
-    print(f"[POPE] 初始化 ECSE 引擎: {model_name}")
+    # Initialize engine
+    print(f"[POPE] Initializing Hulluedit engine: {model_name}")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
     if "llava" in model_name_lower:
         eng_cfg = EngineConfig(
             model_name=cfg["model_name"],
             anchor_layer=cfg.get("anchor_layer", 28),
-            visual_clean_layers=cfg.get("visual_clean_layers", [10]),
             max_new_tokens=cfg.get("max_new_tokens", 128),
             top_p=cfg.get("top_p", 0.9),
             temperature=cfg.get("temperature", 0.12),
             precision=cfg.get("precision", "bf16")
         )
-        engine = LLaVAECSEEngine(eng_cfg, ecse_cfg, device=device)
+        engine = LLaVAHullueditEngine(eng_cfg, hulluedit_cfg, device=device)
         is_llava = True
         is_mplug = False
     elif "minigpt" in model_name_lower:
-        # 从 device 字符串中提取 gpu_id（如 "cuda:0" -> 0）
+        # Extract gpu_id from device string (e.g., "cuda:0" -> 0)
         gpu_id = 0
         if device.startswith("cuda:"):
             try:
@@ -163,22 +162,22 @@ def main():
             temperature=cfg.get("temperature", 0.12),
             gpu_id=cfg.get("gpu_id", gpu_id),
         )
-        engine = MiniGPT4ECSEEngine(eng_cfg, ecse_cfg, device=device)
+        engine = MiniGPT4HullueditEngine(eng_cfg, hulluedit_cfg, device=device)
         is_llava = False
         is_mplug = False
     elif "mplug" in model_name_lower:
-        # 延迟导入 mPlug-Owl2，只在需要时导入
+        # Lazy import mPlug-Owl2
         try:
-            from ecse.engines.mplug_owl2 import MplugOwl2Engine, MplugOwl2EngineConfig
+            from hulluedit.engines.mplug_owl2 import MplugOwl2Engine, MplugOwl2EngineConfig
         except ImportError as e:
             raise ImportError(
-                f"无法导入 mPlug-Owl2 模块。请确保已安装 mplug_owl2 依赖。"
-                f"错误详情: {e}"
+                f"Cannot import mPlug-Owl2 module. Please ensure mplug_owl2 dependencies are installed."
+                f"Error details: {e}"
             )
         
         model_path = cfg.get("model_path")
         if not model_path:
-            raise ValueError("mPLUG-Owl2 需要配置 model_path（HF 或本地路径）")
+            raise ValueError("mPLUG-Owl2 requires model_path (HF or local path)")
         eng_cfg = MplugOwl2EngineConfig(
             model_path=model_path,
             anchor_layer=cfg.get("anchor_layer", 26),
@@ -187,91 +186,86 @@ def main():
             temperature=cfg.get("temperature", 0.12),
             precision=cfg.get("precision", "fp16")
         )
-        engine = MplugOwl2Engine(eng_cfg, ecse_cfg, device=device)
+        engine = MplugOwl2Engine(eng_cfg, hulluedit_cfg, device=device)
         is_llava = False
         is_mplug = True
     else:
-        raise ValueError(f"不支持的模型: {model_name}，请使用 LLaVA、MiniGPT-4 或 mPLUG-Owl2")
+        raise ValueError(f"Unsupported model: {model_name}, please use LLaVA, MiniGPT-4 or mPLUG-Owl2")
     
-    # 加载 POPE 数据
-    print(f"[POPE] 加载数据集: {args.split}")
+    # Load POPE data
+    print(f"[POPE] Loading dataset: {args.split}")
     pope_data = load_pope_data(cfg["pope_root"], args.split)
     
     if args.max_samples:
         pope_data = pope_data[:args.max_samples]
     
-    print(f"[POPE] 样本数: {len(pope_data)}")
+    print(f"[POPE] Number of samples: {len(pope_data)}")
     
-    # 推理
+    # Inference
     results = []
     predictions = []
     labels = []
     
     coco_img_dir = Path(cfg["coco_images"])
     
-    # 打印频率：每 N 个样本打印一次详细信息，或者每个样本都打印（如果样本数较少）
+    # Print frequency: print detailed info every N samples, or every sample if few
     print_every = max(1, len(pope_data) // 100) if len(pope_data) > 100 else 1
     
-    for idx, item in enumerate(tqdm(pope_data, desc="POPE 评测")):
-        # item["image"] 可能是相对路径或绝对路径
+    for idx, item in enumerate(tqdm(pope_data, desc="POPE Evaluation")):
+        # item["image"] may be relative or absolute path
         if "/" in item["image"] and Path(item["image"]).exists():
             image_path = Path(item["image"])
         else:
             image_path = coco_img_dir / item["image"]
         
         if not image_path.exists():
-            tqdm.write(f"[WARNING] 图像不存在: {image_path}")
+            tqdm.write(f"[WARNING] Image not found: {image_path}")
             continue
         
         question = item["text"]
         label = item["label"]  # "yes" or "no"
         
-        # 根据模型类型构建不同的提示
+        # Build different prompts based on model type
         if is_llava:
-            # LLaVA 格式提示
+            # LLaVA format prompt
             prompt = f"USER: <image>\n{question}\nASSISTANT:"
         elif is_mplug:
-            # mPLUG-Owl2 格式提示
+            # mPLUG-Owl2 format prompt
             prompt = f"USER: <|image|>\n{question}\nASSISTANT:"
         else:
-            # MiniGPT-4 格式提示（直接使用问题）
+            # MiniGPT-4 format prompt (use question directly)
             prompt = question
         
-        # 生成
+        # Generate
         try:
             if is_llava:
-                # LLaVA 接受 PIL Image 或路径
+                # LLaVA accepts PIL Image or path
                 image = Image.open(image_path).convert("RGB")
                 output_dict = engine.generate(prompt, image, max_new_tokens=cfg.get("max_new_tokens", 128))
                 pred_text = output_dict.get("text", output_dict.get("output", ""))
             elif is_mplug:
-                # mPLUG-Owl2 接受路径
+                # mPLUG-Owl2 accepts path
                 output_dict = engine.generate(prompt, str(image_path), max_new_tokens=cfg.get("max_new_tokens", 128))
                 pred_text = output_dict.get("text", output_dict.get("output", ""))
             else:
-                # MiniGPT-4 接受路径
+                # MiniGPT-4 accepts path
                 output_dict = engine.generate(prompt, str(image_path), max_new_tokens=cfg.get("max_new_tokens", 128))
                 pred_text = output_dict.get("text", output_dict.get("output", ""))
             
             pred_label = extract_yes_no(pred_text)
             
-            # 计算 ECSE 指标的平均值（如果有）
+            # Compute average Hulluedit metrics (if available)
             certs = output_dict.get("certs", [])
-            avg_ecr = sum(c.get("ecr", 0.0) for c in certs) / len(certs) if certs else 0.0
-            avg_epc = sum(c.get("epc", 0.0) for c in certs) / len(certs) if certs else 0.0
+            avg_vcr = sum(c.get("vcr", 0.0) for c in certs) / len(certs) if certs else 0.0
+            avg_pcr = sum(c.get("pcr", 0.0) for c in certs) / len(certs) if certs else 0.0
             avg_gate = sum(c.get("gate", 0.0) for c in certs) / len(certs) if certs else 0.0
             
-            # 判断是否正确
+            # Check correctness
             is_correct = "✓" if pred_label == label else "✗"
             
-            # 打印输出（使用 tqdm.write 避免干扰进度条）
-            if idx % print_every == 0 or idx < 10:  # 前10个样本总是打印
-                tqdm.write(f"\n[样本 {idx+1}/{len(pope_data)}]")
-                tqdm.write(f"  问题: {question}")
-                tqdm.write(f"  生成: {pred_text[:200]}{'...' if len(pred_text) > 200 else ''}")
-                tqdm.write(f"  提取: {pred_label} | 标签: {label} {is_correct}")
-                if certs:
-                    tqdm.write(f"  ECSE: ECR={avg_ecr:.3f}, EPC={avg_epc:.3f}, Gate={avg_gate:.3f}")
+            # Print output (use tqdm.write to avoid interfering with progress bar)
+            if idx % print_every == 0 or idx < 10:  # Always print first 10 samples
+                pass
             
             results.append({
                 "image": item["image"],
@@ -285,35 +279,31 @@ def main():
             predictions.append(pred_label)
             labels.append(label)
             
-            # 定期打印中间统计信息（每100个样本）
+            # Periodically print intermediate statistics (every 100 samples)
             if len(predictions) > 0 and len(predictions) % 100 == 0:
-                temp_metrics = evaluate_pope(predictions, labels)
-                tqdm.write(f"\n[中间统计] 已处理 {len(predictions)} 个样本")
-                tqdm.write(f"  当前准确率: {temp_metrics['accuracy']:.4f}")
-                tqdm.write(f"  当前 F1: {temp_metrics['f1']:.4f}")
-                tqdm.write(f"  TP/FP/TN/FN: {temp_metrics['tp']}/{temp_metrics['fp']}/{temp_metrics['tn']}/{temp_metrics['fn']}\n")
-            
+                pass
+        
         except Exception as e:
-            tqdm.write(f"[ERROR] 样本 {idx+1} ({image_path}): {e}")
+            tqdm.write(f"[ERROR] Sample {idx+1} ({image_path}): {e}")
             import traceback
             traceback.print_exc()
             continue
     
-    # 计算指标
+    # Compute metrics
     if len(predictions) == 0:
-        print("[ERROR] 没有成功生成任何预测结果")
+        print("[ERROR] No predictions generated successfully")
         return
     
     metrics = evaluate_pope(predictions, labels)
     
-    print("\n[POPE 结果]")
+    print("\n[POPE Results]")
     print(f"  Accuracy:  {metrics['accuracy']:.4f}")
     print(f"  Precision: {metrics['precision']:.4f}")
     print(f"  Recall:    {metrics['recall']:.4f}")
     print(f"  F1 Score:  {metrics['f1']:.4f}")
     print(f"  TP/FP/TN/FN: {metrics['tp']}/{metrics['fp']}/{metrics['tn']}/{metrics['fn']}")
     
-    # 保存结果
+    # Save results
     output_data = {
         "config": args.config,
         "model_name": model_name,
@@ -327,9 +317,8 @@ def main():
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
     
-    print(f"\n[POPE] 结果已保存: {args.output}")
+    print(f"\n[POPE] Results saved: {args.output}")
 
 
 if __name__ == "__main__":
     main()
-

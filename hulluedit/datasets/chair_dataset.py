@@ -1,6 +1,6 @@
 """
-CHAIR 数据集构建器
-参考 Nullu 的采样方式，确保与其他方法的评估一致性
+CHAIR Dataset Builder
+Reference Nullu's sampling method to ensure evaluation consistency with other methods
 """
 import os
 import random
@@ -9,7 +9,7 @@ from pycocotools.coco import COCO
 
 
 class CHAIRDataset:
-    """CHAIR 数据集构建器（参考 Nullu/dataset/CHAIR.py）"""
+    """CHAIR Dataset Builder (reference Nullu/dataset/CHAIR.py)"""
     
     def __init__(
         self, 
@@ -21,11 +21,11 @@ class CHAIRDataset:
     ):
         """
         Args:
-            split: "val" 或 "train"
-            data_root: COCO 数据根目录
-            sampling: "first" 或 "random"
-            num_samples: 采样数量
-            seed: 随机种子
+            split: "val" or "train"
+            data_root: COCO data root directory
+            sampling: "first" or "random"
+            num_samples: Number of samples to sample
+            seed: Random seed
         """
         self.split = split
         self.ann_path = os.path.join(data_root, f"annotations/instances_{split}2014.json")
@@ -35,35 +35,35 @@ class CHAIRDataset:
         self.num_samples = num_samples
         self.seed = seed
         
-        # 设置随机种子
+        # Set random seed
         random.seed(seed)
     
     def get_data(self) -> List[Dict[str, Any]]:
         """
-        获取数据列表
+        Get data list
         
         Returns:
-            List[Dict]: 每个元素包含 image_id, image_path, question
+            List[Dict]: Each element contains image_id, image_path, question
         """
         coco = COCO(self.caption_path)
         
         img_ids = coco.getImgIds()
         
-        # 采样策略
+        # Sampling strategy
         if self.num_samples:
             if self.num_samples > len(img_ids):
-                print(f"[WARN] num_samples {self.num_samples} 超过图像总数 ({len(img_ids)})")
+                print(f"[WARN] num_samples {self.num_samples} exceeds total images ({len(img_ids)})")
                 sampled_img_ids = img_ids
             elif self.sampling == "first":
                 sampled_img_ids = img_ids[:self.num_samples]
             elif self.sampling == "random":
                 sampled_img_ids = random.sample(img_ids, self.num_samples)
             else:
-                raise ValueError(f"不支持的采样策略: {self.sampling}")
+                raise ValueError(f"Unsupported sampling strategy: {self.sampling}")
         else:
             sampled_img_ids = img_ids
         
-        # 构建数据列表
+        # Build data list
         val_data = []
         for cur_img_id in sampled_img_ids:
             cur_img = coco.loadImgs(cur_img_id)[0]
@@ -85,11 +85,10 @@ def build_chair_dataset(
     seed: int = 0
 ) -> List[Dict[str, Any]]:
     """
-    构建 CHAIR 数据集（便捷函数）
+    Build CHAIR dataset (convenience function)
     
     Returns:
-        List[Dict]: 数据列表
+        List[Dict]: Data list
     """
     dataset = CHAIRDataset(split, data_root, sampling, num_samples, seed)
     return dataset.get_data()
-
