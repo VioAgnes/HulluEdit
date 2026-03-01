@@ -1,11 +1,11 @@
-# ECSE POPE Evaluation Config (LLaVA-1.5)
+# POPE Evaluation Config (LLaVA-1.5)
 # Model config
 model_name: /path/to/llava-v1.5-7b
 precision: bf16
 
+
 # ECSE subspace parameters
-anchor_layer: 28
-visual_clean_layers: [10]
+anchor_layer: 26
 rank_evidence: 8
 rank_prior: 5
 kappa: 0.50
@@ -25,12 +25,12 @@ blend_tau: 0.76
 
 # Generation parameters
 max_new_tokens: 64
-top_p: 0.90
-temperature: 0.12
+top_p: 1
+temperature: 0.05
 
 # Dataset config
-pope_root: /path/to/POPE
-coco_images: /path/to/coco/val2014
+pope_root: /path/to/DATA/POPE
+coco_images: /path/to/DATA/val2014
 
 # Output config
 output_dir: /path/to/outputs/pope_llava

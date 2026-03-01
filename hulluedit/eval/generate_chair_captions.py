@@ -226,18 +226,6 @@ def main():
                 
                 if args.verbose:
                     pass
-                    # print(f"\n{'='*80}")
-                    # print(f"[Progress: {idx}/{total}] [Image ID: {image_id}]")
-                    # print(f"[Question]: {question}")
-                    # print(f"[Caption]: {caption}")
-                    # 
-                    # if output["certs"]:
-                    #     last_cert = output["certs"][-1]
-                    #     print(f"[Certs] VCR={last_cert['vcr']:.4f}, "
-                    #           f"PCR={last_cert['pcr']:.4f}, "
-                    #           f"Gate={last_cert['gate']:.4f}")
-                    # print(f"{'='*80}\n")
-                    # sys.stdout.flush()
                 
                 record = {
                     "image_id": image_id,

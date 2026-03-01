@@ -101,13 +101,6 @@ def main():
     
     print(f"\n[Caption] Results saved: {args.output}")
     print(f"  Samples: {len(results)}")
-    
-    # Show statistics
-    if results:
-        avg_vcr = sum(r["certs"][-1]["vcr"] for r in results if r["certs"]) / len(results)
-        avg_pcr = sum(r["certs"][-1]["pcr"] for r in results if r["certs"]) / len(results)
-        print(f"  Avg VCR: {avg_vcr:.4f}")
-        print(f"  Avg PCR: {avg_pcr:.4f}")
 
 
 if __name__ == "__main__":

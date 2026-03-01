@@ -16,7 +16,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from hulluedit.engines.llava7b import LLaVAHullueditEngine, EngineConfig
-from hulluedit.engines.minigpt4 import MiniGPT4HullueditEngine, MiniGPT4EngineConfig
+# from hulluedit.engines.minigpt4 import MiniGPT4HullueditEngine, MiniGPT4EngineConfig
 # mPlug-Owl2 lazy import
 from hulluedit.steer import HullueditConfig
 

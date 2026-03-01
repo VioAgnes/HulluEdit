@@ -1,18 +1,3 @@
-#!/bin/bash
-#SBATCH -J ecse-caption-test
-#SBATCH -o logs/caption_test_%j.out
-#SBATCH -e logs/caption_test_%j.err
-#SBATCH -p gpu
-#SBATCH --gpus=1
-#SBATCH --cpus-per-task=8
-
-# 环境加载
-module load miniconda/24.9.2
-module load cuda/12.1
-eval "$(conda shell.bash hook)"
-conda activate deco311
-export PYTHONUNBUFFERED=1
-
 # NLTK 数据目录（用于 CHAIR 评估）
 export NLTK_DATA=/data/home/scyb531/nltk_data
 
