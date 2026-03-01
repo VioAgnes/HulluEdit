@@ -10,6 +10,7 @@
 <p align="center"><strong>CVPR 2026</strong></p>
 
 > [**HulluEdit: Single-Pass Evidence-Consistent Subspace Editing for Mitigating Hallucinations in Large Vision-Language Models**](https://arxiv.org/pdf/2602.22727) 
+>
 > Yangguang Lin<sup>1</sup>, Quan Fang<sup>1</sup>, Yufei Li<sup>1</sup>, Jiachen Sun<sup>1</sup>, Junyu Gao<sup>2</sup>, Jitao Sang<sup>3</sup> 
 >
 > <sup>1</sup>Beijing University of Posts and Telecommunications, <sup>2</sup>Institute of Automation, Chinese Academy of Sciences, <sup>3</sup>Beijing Jiaotong University
