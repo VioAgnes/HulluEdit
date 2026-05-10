@@ -106,8 +106,6 @@ DATA/POPE/
 
 HulluEdit is designed to be evaluated on multiple hallucination benchmarks: **POPE, AMBER, Hallu-Bench, MME, CHAIR, LlaVA-Bench, and MMVet**.
 
-> 💡 **Current Status:** **POPE** evaluation is fully supported. Additional evaluation scripts will be released in future updates!
-
 ### 🔬 POPE Evaluation
 
 > 💡 **You can even use an RTX 4090 (GPU memory ≥ 20GB) for evaluation.**
