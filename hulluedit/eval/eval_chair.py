@@ -4,7 +4,8 @@ CHAIR evaluation script
 Uses DeCo's chair.py to compute CHAIR metrics (CHAIRs, CHAIRi), and outputs Recall and Len.
 
 Dependencies:
-- /data/home/scyb531/DeCo/chair.py (local copy of CHAIR evaluation implementation)
+- DeCo/Nullu CHAIR implementation. Pass --chair-code-dir or set CHAIR_CODE_DIR
+  to a directory that contains chair.py, or make chair.py importable via PYTHONPATH.
 - NLTK (tokenization, POS tagging, WordNet lemmatization); set NLTK_DATA environment variable
 """
 import argparse
@@ -16,15 +17,22 @@ from pathlib import Path
 from typing import Dict, Any
 from tqdm import tqdm
 
-DECO_ROOT = "/data/home/scyb531/DeCo"
-if DECO_ROOT not in sys.path:
-    sys.path.insert(0, DECO_ROOT)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-try:
-    from chair import CHAIR  # type: ignore
-except Exception as e:
-    print(f"[ERROR] Failed to import DeCo's chair.py: {e}")
-    sys.exit(1)
+
+def load_chair_class(chair_code_dir: str = ""):
+    if chair_code_dir:
+        chair_root = str(Path(chair_code_dir).expanduser().resolve())
+        if chair_root not in sys.path:
+            sys.path.insert(0, chair_root)
+
+    try:
+        from chair import CHAIR  # type: ignore
+        return CHAIR
+    except Exception as e:
+        print(f"[ERROR] Failed to import CHAIR implementation: {e}")
+        print("Set --chair-code-dir or CHAIR_CODE_DIR to a directory containing chair.py.")
+        sys.exit(1)
 
 
 def read_jsonl(file_path: str):
@@ -61,7 +69,19 @@ def parse_coco_int_id(image_id) -> int:
     raise ValueError(f"Failed to parse COCO image_id: {image_id}")
 
 
-def compute_chair_metrics(jsonl_file: str, coco_annotations_dir: str, cache_file: str = "") -> Dict[str, Any]:
+def build_chair_evaluator(chair_cls, coco_annotations_dir: str, image_ids):
+    try:
+        return chair_cls(coco_annotations_dir, image_ids=image_ids)
+    except TypeError:
+        return chair_cls(coco_annotations_dir)
+
+
+def compute_chair_metrics(
+    jsonl_file: str,
+    coco_annotations_dir: str,
+    cache_file: str = "",
+    chair_code_dir: str = "",
+) -> Dict[str, Any]:
     """
     Compute metrics using DeCo's CHAIR implementation.
 
@@ -74,21 +94,33 @@ def compute_chair_metrics(jsonl_file: str, coco_annotations_dir: str, cache_file
         dict: Output consistent with DeCo/chair.py (sentences and overall_metrics)
     """
     import pickle
+    chair_cls = load_chair_class(chair_code_dir)
+    eval_image_ids = {parse_coco_int_id(item["image_id"]) for item in read_jsonl(jsonl_file)}
 
     if cache_file and os.path.exists(cache_file):
         try:
             evaluator = pickle.load(open(cache_file, 'rb'))
-            print(f"loaded evaluator from cache: {cache_file}")
+            cached_image_ids = getattr(evaluator, "image_ids", None)
+            if cached_image_ids is not None and set(cached_image_ids) != eval_image_ids:
+                print("cache image_ids do not match current input; rebuilding...")
+                evaluator = build_chair_evaluator(chair_cls, coco_annotations_dir, eval_image_ids)
+                os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+                pickle.dump(evaluator, open(cache_file, 'wb'))
+                print(f"cached evaluator to: {cache_file}")
+            else:
+                print(f"loaded evaluator from cache: {cache_file}")
         except Exception as e:
             print(f"Cache loading failed (will rebuild): {e}")
-            evaluator = CHAIR(coco_annotations_dir)
+            evaluator = build_chair_evaluator(chair_cls, coco_annotations_dir, eval_image_ids)
             if cache_file:
+                os.makedirs(os.path.dirname(cache_file), exist_ok=True)
                 pickle.dump(evaluator, open(cache_file, 'wb'))
                 print(f"cached evaluator to: {cache_file}")
     else:
         print("cache not set or not exist yet, building from scratch...")
-        evaluator = CHAIR(coco_annotations_dir)
+        evaluator = build_chair_evaluator(chair_cls, coco_annotations_dir, eval_image_ids)
         if cache_file:
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
             pickle.dump(evaluator, open(cache_file, 'wb'))
             print(f"cached evaluator to: {cache_file}")
 
@@ -103,12 +135,14 @@ def parse_args():
     parser.add_argument("--input", type=str, required=True, 
                        help="Generated caption JSONL file")
     parser.add_argument("--coco-annotations", type=str, 
-                       default="/data/home/scyb531/DATA/annotations",
+                       default=str(PROJECT_ROOT / "DATA" / "annotations"),
                        help="COCO annotations directory (contains captions/instances *2014.json)")
     parser.add_argument("--output", type=str, default=None,
                        help="Output JSON file (auto-generated if not specified)")
-    parser.add_argument("--cache", type=str, default="/data/home/scyb531/DeCo/eval_Nullu/CHAIR/chair.pkl",
+    parser.add_argument("--cache", type=str, default=str(PROJECT_ROOT / "outputs" / "chair" / "chair.pkl"),
                        help="CHAIR evaluator cache (pickle) path; leave empty to disable caching")
+    parser.add_argument("--chair-code-dir", type=str, default=os.environ.get("CHAIR_CODE_DIR", ""),
+                       help="Directory containing DeCo/Nullu chair.py; defaults to CHAIR_CODE_DIR or PYTHONPATH")
     parser.add_argument("--verbose", action="store_true",
                        help="Print detailed results")
     
@@ -133,6 +167,7 @@ def main():
         jsonl_file=args.input,
         coco_annotations_dir=args.coco_annotations,
         cache_file=args.cache if args.cache else "",
+        chair_code_dir=args.chair_code_dir,
     )
     
     halc_caption_result = chair_result.get("sentences", [])
@@ -183,8 +218,8 @@ def main():
     
     result = {
         "input_file": args.input,
-": n_samples,
-        "num_samples        "overall_metrics": overall,
+        "num_samples": n_samples,
+        "overall_metrics": overall,
         "per_image_results": halc_result,
         "full_chair_output": chair_result
     }

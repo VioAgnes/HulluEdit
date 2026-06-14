@@ -42,6 +42,8 @@ def parse_args():
     parser.add_argument("--split", type=str, default=None, choices=["val", "train"])
     parser.add_argument("--sampling", type=str, default=None, choices=["first", "random"])
     parser.add_argument("--num-samples", type=int, default=None)
+    parser.add_argument("--image-ids", type=str, default=None,
+                        help="Optional comma-separated COCO image ids. Overrides sampling/num-samples after dataset loading.")
     
     parser.add_argument("--output-dir", type=str, default=None)
     parser.add_argument("--output-file", type=str, default=None)
@@ -54,6 +56,7 @@ def parse_args():
 
 def main():
     args = parse_args()
+    project_root = Path(__file__).resolve().parents[2]
     
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
@@ -64,9 +67,9 @@ def main():
     split = args.split if args.split else cfg.get("split", "val")
     sampling = args.sampling if args.sampling else cfg.get("sampling", "random")
     num_samples = args.num_samples if args.num_samples else cfg.get("num_samples", 500)
-    data_root = cfg.get("coco_root", "/data/home/scyb531/DATA/")
+    data_root = cfg.get("coco_root", str(project_root / "DATA"))
     
-    output_dir = args.output_dir if args.output_dir else cfg.get("output_dir", "/data/home/scyb531/lyg/HulluEdit/outputs/chair")
+    output_dir = args.output_dir if args.output_dir else cfg.get("output_dir", str(project_root / "outputs" / "chair"))
     os.makedirs(output_dir, exist_ok=True)
     
     print("=" * 80)
@@ -98,6 +101,24 @@ def main():
         num_samples=num_samples,
         seed=seed
     )
+    if args.image_ids:
+        requested_ids = [int(x.strip()) for x in args.image_ids.split(",") if x.strip()]
+        requested_set = set(requested_ids)
+        data_by_id = {int(item["image_id"]): item for item in data}
+        missing_ids = [image_id for image_id in requested_ids if image_id not in data_by_id]
+        if missing_ids:
+            full_data = build_chair_dataset(
+                split=split,
+                data_root=data_root,
+                sampling="first",
+                num_samples=None,
+                seed=seed
+            )
+            data_by_id = {int(item["image_id"]): item for item in full_data}
+            missing_ids = [image_id for image_id in requested_ids if image_id not in data_by_id]
+        if missing_ids:
+            raise ValueError(f"Requested image ids not found in COCO {split}2014: {missing_ids}")
+        data = [data_by_id[image_id] for image_id in requested_ids if image_id in requested_set]
     print(f"Loaded {len(data)} images")
     
     print("Initializing Hulluedit parameters...")
@@ -149,6 +170,7 @@ def main():
             max_new_tokens=cfg.get("max_new_tokens", 128),
             top_p=cfg.get("top_p", 0.9),
             temperature=cfg.get("temperature", 0.2),
+            num_beams=cfg.get("num_beams", 1),
             precision=cfg.get("precision", "bf16")
         )
         engine = LLaVAHullueditEngine(eng_cfg, hulluedit_cfg)
@@ -201,26 +223,51 @@ def main():
     print("=" * 80)
     
     if engine_name == "llava":
-        prompt_template = "USER: <image>\n{question}\nASSISTANT:"
+        prompt_template = None
     elif engine_name in ["mplug", "mplug_owl2", "mplug-owl2"]:
         prompt_template = "USER: <|image|>\n{question}\nASSISTANT:"
     else:
         prompt_template = "{question}"
-    written = 0
+    processed_image_ids = set()
+    if os.path.exists(output_file):
+        with open(output_file, "r") as existing_f:
+            for line in existing_f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    processed_image_ids.add(int(json.loads(line)["image_id"]))
+                except Exception:
+                    pass
+        if processed_image_ids:
+            print(f"Resuming from existing output: {len(processed_image_ids)} captions already present")
+
+    written = len(processed_image_ids)
     total = len(data)
     
-    with open(output_file, "w") as f:
+    with open(output_file, "a" if processed_image_ids else "w") as f:
         for idx, item in enumerate(tqdm(data, desc="Generating Caption"), start=1):
             image_id = int(item["image_id"])
             image_path = item["image_path"]
             question = item.get("question", "Please describe this image in detail.")
+
+            if image_id in processed_image_ids:
+                continue
             
             if not os.path.exists(image_path):
                 print(f"[WARN] Image does not exist: {image_path}")
                 continue
             
             try:
-                prompt = prompt_template.format(question=question)
+                if engine_name == "llava":
+                    from llava.constants import DEFAULT_IMAGE_TOKEN
+                    from llava.conversation import conv_templates
+                    conv = conv_templates["llava_v1"].copy()
+                    conv.append_message(conv.roles[0], DEFAULT_IMAGE_TOKEN + "\n" + question)
+                    conv.append_message(conv.roles[1], None)
+                    prompt = conv.get_prompt()
+                else:
+                    prompt = prompt_template.format(question=question)
                 output = engine.generate(prompt, image_path)
                 caption = output["text"]
                 
@@ -250,4 +297,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

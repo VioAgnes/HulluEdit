@@ -1,0 +1,39 @@
+# CHAIR reproduction config for LLaVA-1.5-7B + HulluEdit.
+# This follows the Nullu CHAIR protocol: COCO val2014 random 500
+# samples, seed 0, LLaVA v1 prompt, beam search with 3 beams, and
+# max_new_tokens=64.
+
+engine: llava
+model_name: /path/to/llava-v1.5-7b
+precision: fp16
+
+# CHAIR-tuned HulluEdit parameters.
+anchor_layer: 24
+rank_evidence: 8
+rank_prior: 1
+kappa: 0.35
+lambda_prior: 0.025
+eps: 1.0e-6
+weight_temp: 1.20
+vcr_floor: 0.10
+pcr_ceiling: 0.85
+pcr_threshold: 0.08
+lambda_n_max: 0.70
+lambda_p_max: 0.12
+norm_preserve: true
+norm_beta: 0.50
+blend_tau: 0.30
+
+# Nullu CHAIR decoding protocol.
+max_new_tokens: 64
+top_p: 1.0
+temperature: 0.0
+num_beams: 3
+
+# Nullu CHAIR data protocol.
+split: val
+sampling: random
+num_samples: 500
+seed: 0
+coco_root: DATA
+output_dir: outputs/chair

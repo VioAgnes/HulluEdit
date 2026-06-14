@@ -48,6 +48,7 @@ class EngineConfig:
     max_new_tokens: int = 128
     top_p: float = 0.9
     temperature: float = 0.2
+    num_beams: int = 1
     precision: str = "bf16"
 
 
@@ -154,9 +155,12 @@ class LLaVAHullueditEngine:
             {
                 "text": generated text,
                 "certs": [{"vcr": ..., "pcr": ..., "gate": ...}, ...],
-                "tokens": generated token list
+            "tokens": generated token list
             }
         """
+        if self.eng_cfg.num_beams > 1 and self.eng_cfg.temperature <= 1e-6:
+            return self._generate_hf_beam(prompt, image, max_new_tokens=max_new_tokens)
+
         batch = self._build_inputs(prompt, image)
         max_steps = max_new_tokens or self.eng_cfg.max_new_tokens
         
@@ -336,4 +340,171 @@ class LLaVAHullueditEngine:
             "text": generated_text,
             "certs": certs,
             "tokens": generated_ids
+        }
+
+    def _edit_logits(
+        self,
+        h_to_edit: torch.Tensor,
+        cached_vis_states: Dict[int, torch.Tensor],
+        cached_txt_states: Dict[int, torch.Tensor],
+        target_layers: List[int],
+    ) -> tuple[torch.Tensor, Dict[str, float]]:
+        """Apply HulluEdit to one beam hidden state and map the edited state to logits."""
+        if len(target_layers) == 1:
+            L = target_layers[0]
+            U = self.steerer.compute_evidence_subspace(cached_vis_states[L], h_to_edit)
+            P = self.steerer.compute_anti_prior_subspace(cached_txt_states[L], U)
+            edit_result = self.steerer.edit_text_hidden(h_to_edit, U, P)
+            h_edited = edit_result.h_edited
+            cert = {
+                "vcr": float(edit_result.vcr.cpu()),
+                "pcr": float(edit_result.pcr.cpu()),
+                "gate": float(edit_result.gate.cpu()),
+            }
+        else:
+            per_layer = []
+            vcr_list = []
+            for L in target_layers:
+                U = self.steerer.compute_evidence_subspace(cached_vis_states[L], h_to_edit)
+                P = self.steerer.compute_anti_prior_subspace(cached_txt_states[L], U)
+                er = self.steerer.edit_text_hidden(h_to_edit, U, P)
+                per_layer.append(er)
+                vcr_list.append(float(er.vcr.detach().cpu()))
+            if self.eng_cfg.layer_weighting == "equal":
+                weights = torch.ones(len(per_layer), device=h_to_edit.device, dtype=h_to_edit.dtype) / len(per_layer)
+            else:
+                vcr_tensor = torch.tensor(vcr_list, device=h_to_edit.device, dtype=h_to_edit.dtype)
+                temp = max(1e-6, float(self.eng_cfg.layer_weight_temp))
+                weights = torch.softmax(vcr_tensor / temp, dim=0)
+            h_stack = torch.stack([er.h_edited for er in per_layer], dim=0)
+            h_edited = (weights[:, None] * h_stack).sum(dim=0)
+            cert = {
+                "vcr": float(sum(vcr_list) / max(1, len(per_layer))),
+                "pcr": float(sum(float(er.pcr.detach().cpu()) for er in per_layer) / max(1, len(per_layer))),
+                "gate": float(sum(float(er.gate.detach().cpu()) for er in per_layer) / max(1, len(per_layer))),
+            }
+        return self.model.lm_head(h_edited.unsqueeze(0)).squeeze(0), cert
+
+    @torch.no_grad()
+    def _generate_hf_beam(
+        self,
+        prompt: str,
+        image: str | Image.Image,
+        max_new_tokens: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Use the HF/LLaVA generate path and edit last-step logits.
+
+        This keeps Nullu's CHAIR decoding protocol (HF beam search) intact. The
+        online text cache is intentionally limited to the prompt text states so
+        beam reordering remains exactly controlled by Transformers.
+        """
+        from llava.mm_utils import KeywordsStoppingCriteria
+
+        batch = self._build_inputs(prompt, image)
+        input_ids = batch["input_ids"]
+        images = batch.get("images")
+        max_steps = max_new_tokens or self.eng_cfg.max_new_tokens
+        num_beams = int(max(1, self.eng_cfg.num_beams))
+        original_forward = self.model.forward
+        state: Dict[str, Any] = {
+            "initialized": False,
+            "vis": None,
+            "txt": None,
+            "target_layers": None,
+            "edit_layer": None,
+            "certs": [],
+        }
+
+        skip_edit = (
+            self.hulluedit_cfg.use_fixed_strengths
+            and float(self.hulluedit_cfg.fixed_lambda_n) == 0.0
+            and float(self.hulluedit_cfg.fixed_lambda_p) == 0.0
+        )
+
+        def steered_forward(*args, **kwargs):
+            kwargs["output_hidden_states"] = True
+            kwargs["return_dict"] = True
+            outputs = original_forward(*args, **kwargs)
+            if skip_edit:
+                return outputs
+
+            hidden_states = outputs.hidden_states
+            num_layers = len(hidden_states) - 1
+            estimate_layer = self.eng_cfg.estimate_layer if self.eng_cfg.estimate_layer is not None else self.eng_cfg.anchor_layer
+            if estimate_layer == -1:
+                estimate_layer = num_layers
+            edit_layer = self.eng_cfg.edit_layer if self.eng_cfg.edit_layer is not None else -1
+            if edit_layer == -1:
+                edit_layer = num_layers
+            target_layers = list(self.eng_cfg.multi_anchor_layers) if self.eng_cfg.multi_anchor_layers else [estimate_layer]
+
+            if not state["initialized"]:
+                seq_len = hidden_states[target_layers[0]].shape[1]
+                vision_end_idx = min(1 + 576, seq_len - 1)
+                cached_vis_states: Dict[int, torch.Tensor] = {}
+                cached_txt_states: Dict[int, torch.Tensor] = {}
+                for L in target_layers:
+                    hL = hidden_states[L]
+                    cached_vis_states[L] = hL[0, 1:vision_end_idx, :].clone()
+                    if vision_end_idx < seq_len - 1:
+                        cached_txt_states[L] = hL[0, vision_end_idx:-1, :].clone()
+                    else:
+                        cached_txt_states[L] = torch.empty(0, hL.shape[2], dtype=hL.dtype, device=self.device)
+                state.update({
+                    "initialized": True,
+                    "vis": cached_vis_states,
+                    "txt": cached_txt_states,
+                    "target_layers": target_layers,
+                    "edit_layer": edit_layer,
+                })
+
+            logits = outputs.logits.clone()
+            batch_size = logits.shape[0]
+            edited_rows = []
+            row_certs = []
+            for row in range(batch_size):
+                row_logits, cert = self._edit_logits(
+                    hidden_states[state["edit_layer"]][row, -1, :],
+                    state["vis"],
+                    state["txt"],
+                    state["target_layers"],
+                )
+                edited_rows.append(row_logits.to(logits.dtype))
+                row_certs.append(cert)
+            logits[:, -1, :] = torch.stack(edited_rows, dim=0)
+            state["certs"].append(row_certs)
+            outputs.logits = logits
+            return outputs
+
+        self.model.forward = steered_forward
+        original_validate_model_kwargs = self.model._validate_model_kwargs
+        self.model._validate_model_kwargs = lambda model_kwargs: None
+        try:
+            stopping_criteria = KeywordsStoppingCriteria(["###"], self.tokenizer, input_ids)
+            output_ids = self.model.generate(
+                input_ids,
+                images=images,
+                attention_mask=torch.ones_like(input_ids, device=self.device),
+                do_sample=False,
+                temperature=0.0,
+                top_p=None,
+                top_k=None,
+                num_beams=num_beams,
+                max_new_tokens=max_steps,
+                use_cache=True,
+                stopping_criteria=[stopping_criteria],
+            )
+        finally:
+            self.model.forward = original_forward
+            self.model._validate_model_kwargs = original_validate_model_kwargs
+
+        token_tensor = output_ids[0, input_ids.shape[1]:]
+        token_ids = token_tensor.detach().cpu().tolist()
+        text = self.tokenizer.decode(token_tensor, skip_special_tokens=True)
+        if "###" in text:
+            text = text.split("###")[0]
+        return {
+            "text": text.strip(),
+            "certs": state["certs"],
+            "tokens": token_ids,
         }
