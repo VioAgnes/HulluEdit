@@ -1,0 +1,37 @@
+# CHAIR reproduction config for Qwen2.5-VL-7B-Instruct + HulluEdit/Ours.
+# Main captioning setting from the HulluEdit paper: top_p=1.0,
+# temperature=0.05, max generation length capped at 64 tokens.
+
+engine: qwen2_5_vl
+model_path: /mlx_devbox/users/linyangguang/playground/MODELS/Qwen2.5-VL-7B-Instruct
+precision: bf16
+
+# CHAIR-tuned HulluEdit parameters from the repository's Nullu-protocol config.
+anchor_layer: 24
+rank_evidence: 8
+rank_prior: 1
+kappa: 0.35
+lambda_prior: 0.025
+eps: 1.0e-6
+weight_temp: 1.20
+vcr_floor: 0.10
+pcr_ceiling: 0.85
+pcr_threshold: 0.08
+lambda_n_max: 0.70
+lambda_p_max: 0.12
+norm_preserve: true
+norm_beta: 0.50
+blend_tau: 0.30
+
+max_new_tokens: 64
+top_p: 1.0
+temperature: 0.05
+num_beams: 1
+
+# CHAIR data protocol: COCO val2014 random 500, seed 0.
+split: val
+sampling: random
+num_samples: 500
+seed: 0
+coco_root: DATA
+output_dir: outputs/chair_qwen25vl
